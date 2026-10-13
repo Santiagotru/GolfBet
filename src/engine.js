@@ -48,7 +48,7 @@ export function calculate(match) {
     const ranked=groups(players,p=>Number(p.net));
     const policies = c.policies || [{mode:'prize',percent:100}];
     const charges=new Map(), weights=new Map();
-    let position=0;
+    let position=0, payingPosition=0;
     for (const tied of ranked) {
       const slots = tied.map((_,i)=>policies[position+i] || {mode:'pay'});
       const prizePercent=slots.reduce((sum,s)=>sum+(s.mode==='prize'?Number(s.percent):0),0);
@@ -56,7 +56,11 @@ export function calculate(match) {
       let charge=0;
       // Todos los empatados de un puesto premiado comparten su premio y están exentos.
       if (!prizePercent) {
-        const slotCharges=slots.map((s,i)=>s.mode==='pay'?(c.mode==='fixed'?money(c.amount):money(c.step)*(position+i)):0);
+        const slotCharges=slots.map(s=>{
+          if(s.mode!=='pay')return 0;
+          payingPosition++;
+          return c.mode==='fixed'?money(c.amount):money(c.step)*payingPosition;
+        });
         charge = c.tieMode==='same' ? slotCharges[0] : slotCharges.reduce((a,b)=>a+b,0)/tied.length;
       }
       // Redondeo compartido a centavos: la suma conserva el aporte del grupo.
