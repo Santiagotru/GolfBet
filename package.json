@@ -1,0 +1,24 @@
+{
+  "name": "golfbet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "playwright test",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-golfbet \"node --test tests/firestore.rules.test.mjs\"",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules --project golfbet-34a06"
+  },
+  "dependencies": {
+    "firebase": "^12.0.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@playwright/test": "^1.64.0",
+    "firebase-tools": "^15.33.0",
+    "vite": "^7.0.0"
+  }
+}

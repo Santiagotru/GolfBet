@@ -1,0 +1,33 @@
+import {initializeApp} from 'firebase/app';
+import {getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'firebase/auth';
+import {getFirestore,collection,doc,setDoc,getDoc,getDocs,query,where,limit,serverTimestamp} from 'firebase/firestore';
+const e=import.meta.env;
+export const configured=Boolean(e.VITE_FIREBASE_API_KEY && e.VITE_FIREBASE_AUTH_DOMAIN && e.VITE_FIREBASE_PROJECT_ID && e.VITE_FIREBASE_APP_ID);
+let auth,db;
+if(configured){
+  const app=initializeApp({apiKey:e.VITE_FIREBASE_API_KEY,authDomain:e.VITE_FIREBASE_AUTH_DOMAIN,projectId:e.VITE_FIREBASE_PROJECT_ID,appId:e.VITE_FIREBASE_APP_ID});
+  auth=getAuth(app);db=getFirestore(app);
+}
+export const watchAuth=fn=>configured?onAuthStateChanged(auth,fn):(fn(null),()=>{});
+export const login=()=>signInWithPopup(auth,new GoogleAuthProvider());
+export const logout=()=>signOut(auth);
+export async function saveMatch(match,user){
+  const ref=doc(db,'matches',match.id);
+  const previous=await getDoc(ref);
+  if(previous.exists()&&previous.data().ownerId!==user.uid)throw new Error('Solo el creador puede editar esta partida.');
+  await setDoc(ref,{...match,ownerId:user.uid,ownerName:user.displayName || 'Jugador',updatedAt:serverTimestamp(),createdAt:previous.exists()?previous.data().createdAt:serverTimestamp()});
+}
+export async function listMatches(){
+  const user=auth.currentUser;
+  if(!user)return [];
+  const queries=[query(collection(db,'matches'),where('ownerId','==',user.uid),limit(100)),query(collection(db,'matches'),where('visibility','==','public'),limit(100))];
+  if(user.email && user.emailVerified)queries.push(query(collection(db,'matches'),where('sharedEmails','array-contains',user.email.toLowerCase()),limit(100)));
+  const snapshots=await Promise.all(queries.map(q=>getDocs(q)));
+  const unique=new Map();snapshots.forEach(s=>s.docs.forEach(d=>unique.set(d.id,{...d.data(),id:d.id})));
+  return [...unique.values()].sort((a,b)=>(b.updatedAt?.seconds||0)-(a.updatedAt?.seconds||0));
+}
+export async function loadMatch(id){
+  const snapshot=await getDoc(doc(db,'matches',id));
+  if(!snapshot.exists())throw new Error('La partida no existe.');
+  return {...snapshot.data(),id:snapshot.id};
+}

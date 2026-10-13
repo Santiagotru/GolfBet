@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function validMatch() {
+      let m = request.resource.data;
+      return m.keys().hasAll(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails'])
+        && m.keys().hasOnly(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails'])
+        && m.id is string && m.id.size() > 0
+        && m.name is string && m.name.size() > 0 && m.name.size() <= 100
+        && m.date is string && m.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && m.holes == 18
+        && m.players is list && m.players.size() >= 2 && m.players.size() <= 100
+        && m.teams is list && m.teams.size() <= 50
+        && m.games is map
+        && m.ownerId == request.auth.uid
+        && m.visibility in ['private', 'shared', 'public']
+        && m.sharedEmails is list && m.sharedEmails.size() <= 50
+        && (m.visibility == 'shared' ? m.sharedEmails.size() > 0 : m.sharedEmails.size() == 0)
+        && m.ownerName is string
+        && m.updatedAt == request.time;
+    }
+    match /matches/{matchId} {
+      allow read: if signedIn() && (
+        resource.data.ownerId == request.auth.uid
+        || resource.data.get('visibility', 'public') == 'public'
+        || (request.auth.token.get('email_verified', false)
+          && request.auth.token.get('email', '').lower() in resource.data.get('sharedEmails', []))
+      );
+      allow create: if signedIn() && validMatch()
+        && request.resource.data.id == matchId
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid
+        && validMatch()
+        && request.resource.data.id == matchId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
