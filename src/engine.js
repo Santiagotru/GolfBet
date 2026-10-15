@@ -125,26 +125,28 @@ export function calculate(match) {
     const played=(c.holes||[]).filter(h=>Number(h.hole)>=start && Number(h.hole)<=end).sort((a,b)=>Number(a.hole)-Number(b.hole));
     if(played.length!==end-start+1 || new Set(played.map(h=>Number(h.hole))).size!==played.length)fail('Completá todos los hoyos del recorrido de Skins.');
     const prizes=new Map(ids.map(id=>[id,0])),details=[];
-    let pending=0,refundPerPlayer=0;
+    let pending=0,pendingAmount=0,refundPerPlayer=0,totalContribution=0;
     for(const h of played){
+      const holeAmount=h.amount==null || h.amount===''?amount:money(h.amount);
+      totalContribution+=holeAmount;
       let winner=null;
       if(h.winner!=='tie' && !ids.includes(h.winner))fail(`Indicá el ganador o empate de Skins del hoyo ${h.hole}.`);
       if(h.winner!=='tie')winner=h.winner;
-      pending++;
+      pending++;pendingAmount+=holeAmount;
       if(winner){
-        const pot=pending*amount*players.length;
+        const pot=pendingAmount*players.length;
         prizes.set(winner,prizes.get(winner)+pot);
-        details.push({hole:Number(h.hole),winner,skins:pending,pot,status:'won'});pending=0;
+        details.push({hole:Number(h.hole),amount:holeAmount,winner,skins:pending,pot,status:'won'});pending=0;pendingAmount=0;
       }else if(c.carry!==false){
-        details.push({hole:Number(h.hole),winner:null,skins:pending,pot:pending*amount*players.length,status:'carry'});
+        details.push({hole:Number(h.hole),amount:holeAmount,winner:null,skins:pending,pot:pendingAmount*players.length,status:'carry'});
       }else{
-        ids.forEach(id=>prizes.set(id,prizes.get(id)+amount));refundPerPlayer+=amount;
-        details.push({hole:Number(h.hole),winner:null,skins:1,pot:amount*players.length,status:'refunded'});pending=0;
+        ids.forEach(id=>prizes.set(id,prizes.get(id)+holeAmount));refundPerPlayer+=holeAmount;
+        details.push({hole:Number(h.hole),amount:holeAmount,winner:null,skins:1,pot:holeAmount*players.length,status:'refunded'});pending=0;pendingAmount=0;
       }
     }
-    if(pending){const refund=pending*amount;ids.forEach(id=>prizes.set(id,prizes.get(id)+refund));refundPerPlayer+=refund;}
-    skins={holes:details,refundPerPlayer,pending,amount};
-    record('Skins · '+played.length+' hoyos',new Map(ids.map(id=>[id,amount*played.length])),prizes);
+    if(pending){const refund=pendingAmount;ids.forEach(id=>prizes.set(id,prizes.get(id)+refund));refundPerPlayer+=refund;}
+    skins={holes:details,refundPerPlayer,pending,amount,totalContribution};
+    record('Skins · '+played.length+' hoyos',new Map(ids.map(id=>[id,totalContribution])),prizes);
   }
   if (!pots.length) fail('Activá al menos una apuesta.');
   const results=[...rows.values()].sort((a,b)=>b.total-a.total || a.name.localeCompare(b.name));

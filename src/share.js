@@ -23,7 +23,7 @@ export function whatsappText(match){
   for(const a of g.approaches||[])if(a.enabled)lines.push('',`*Approach · hoyo ${a.hole}*`,`Ganadores: ${a.winners.map(id=>names[id]).join(', ')}`);
   if(r.skins){
     lines.push('','*Skins Game*');
-    r.skins.holes.forEach(h=>lines.push(`Hoyo ${h.hole}: ${h.winner?`${names[h.winner]} · ${h.skins} skin(s) · ${currency(h.pot)}`:h.status==='carry'?'empate · acumula':'empate · aporte devuelto'}`));
+    r.skins.holes.forEach(h=>lines.push(`Hoyo ${h.hole}: ${h.winner?`${names[h.winner]} · ${h.skins} skin(s) · ${currency(h.pot)}`:h.status==='carry'?'empate · acumula':'empate · aporte devuelto'} · valor por jugador ${currency(h.amount)}`));
     if(r.skins.refundPerPlayer)lines.push(`Devuelto por jugador: ${currency(r.skins.refundPerPlayer)} (incluido en el saldo).`);
   }
   if(r.tableTotal)lines.push('',`*Para la mesa: ${currency(r.tableTotal)}*`);

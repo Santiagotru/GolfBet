@@ -95,6 +95,8 @@ Copiar para WhatsApp incluye cuánto gana/pierde cada jugador, Medal ordenado co
 
 ## Skins Game
 
-Activar en las apuestas del día. Configurar el aporte por jugador y hoyo, recorrido (18 hoyos, ida 1–9 o vuelta 10–18) y acumulación de empates. Cargar directamente el ganador de cada hoyo o marcar empate; Pendiente bloquea la liquidación. No se cargan scores de Skins.
+Activar en las apuestas del día. Configurar el aporte general por jugador y hoyo (con valores particulares opcionales en cada fila), recorrido (18 hoyos, ida 1–9 o vuelta 10–18) y acumulación de empates. Cargar directamente el ganador de cada hoyo o marcar empate; Pendiente bloquea la liquidación. No se cargan scores de Skins.
 
 Todos los jugadores aportan por hoyo. Con acumulación, el siguiente ganador único cobra el pozo del hoyo más los anteriores empatados. Sin acumulación se devuelve el aporte de cada hoyo empatado. Los pozos aún pendientes al final del recorrido se devuelven por igual a quienes aportaron. Las devoluciones están incluidas en los saldos; no son premios nuevos. NPT de Medal no excluye de Skins. El desglose individual, CSV y mensaje para WhatsApp incluyen Skins, con detalle de hoyos y devoluciones en pantalla y WhatsApp.
+
+Los valores particulares de Skins reemplazan el general solo en ese hoyo. Vacío usa el valor general; 0 significa hoyo sin aporte. La acumulación y las devoluciones suman los importes reales de cada hoyo. La liquidación y el texto de WhatsApp muestran esos valores.
