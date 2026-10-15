@@ -1,6 +1,7 @@
+import {saveMatchToStore} from './persistence.js';
 import {initializeApp} from 'firebase/app';
 import {getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'firebase/auth';
-import {getFirestore,collection,doc,setDoc,getDoc,getDocs,query,where,limit,serverTimestamp} from 'firebase/firestore';
+import {getFirestore,collection,doc,getDoc,getDocs,query,where,limit} from 'firebase/firestore';
 const e=import.meta.env;
 export const configured=Boolean(e.VITE_FIREBASE_API_KEY && e.VITE_FIREBASE_AUTH_DOMAIN && e.VITE_FIREBASE_PROJECT_ID && e.VITE_FIREBASE_APP_ID);
 let auth,db;
@@ -11,12 +12,7 @@ if(configured){
 export const watchAuth=fn=>configured?onAuthStateChanged(auth,fn):(fn(null),()=>{});
 export const login=()=>signInWithPopup(auth,new GoogleAuthProvider());
 export const logout=()=>signOut(auth);
-export async function saveMatch(match,user){
-  const ref=doc(db,'matches',match.id);
-  const previous=await getDoc(ref);
-  if(previous.exists()&&previous.data().ownerId!==user.uid)throw new Error('Solo el creador puede editar esta partida.');
-  await setDoc(ref,{...match,ownerId:user.uid,ownerName:user.displayName || 'Jugador',updatedAt:serverTimestamp(),createdAt:previous.exists()?previous.data().createdAt:serverTimestamp()});
-}
+export const saveMatch=(match,user)=>saveMatchToStore(db,match,user);
 export async function listMatches(){
   const user=auth.currentUser;
   if(!user)return [];
