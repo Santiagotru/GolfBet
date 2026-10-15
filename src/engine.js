@@ -30,15 +30,17 @@ export function calculate(match) {
   if (new Set(ids).size !== ids.length || players.some(p => !p.id || !p.name?.trim())) fail('Los jugadores deben tener nombre e identificador único.');
   const rows = new Map(players.map(p => [p.id, {id:p.id, name:p.name, entries:[], total:0}]));
   const pots = [];
-  function record(label, charges, prizes) {
+  let tableTotal=0;
+  function record(label, charges, prizes, retained=0) {
     const pot = [...charges.values()].reduce((a,b)=>a+b,0);
-    if (pot !== [...prizes.values()].reduce((a,b)=>a+b,0)) fail(`El reparto de ${label} no suma el pozo completo.`);
+    if (pot !== [...prizes.values()].reduce((a,b)=>a+b,0)+retained) fail(`El reparto de ${label} no suma el pozo completo.`);
     for (const p of players) {
       const paid = charges.get(p.id) || 0, won = prizes.get(p.id) || 0;
       rows.get(p.id).entries.push({label, paid, won, net:won-paid});
       rows.get(p.id).total += won-paid;
     }
-    pots.push({label, total:pot});
+    tableTotal+=retained;
+    pots.push({label, total:pot,forTable:retained>0});
   }
   function fixed(label, amount, winners) {
     if (!Array.isArray(winners) || !winners.length || new Set(winners).size !== winners.length || winners.some(id=>!rows.has(id))) fail(`Elegí los ganadores de ${label}.`);
@@ -87,7 +89,7 @@ export function calculate(match) {
     }
     award('Medal · neto',charges);
     const penalty=money(c.nptPenalty ?? 0);
-    if(penalty && players.some(p=>p.npt))award('Medal · penalidad NPT',new Map(players.map(p=>[p.id,p.npt?penalty:0])));
+    if(penalty && players.some(p=>p.npt))record('Medal · penalidad NPT para la mesa',new Map(players.map(p=>[p.id,p.npt?penalty:0])),new Map(),penalty*players.filter(p=>p.npt).length);
 
   }
   if (games.laguneada?.enabled) {
@@ -120,6 +122,7 @@ export function calculate(match) {
   const results=[...rows.values()].sort((a,b)=>b.total-a.total || a.name.localeCompare(b.name));
   const debtors=results.filter(r=>r.total<0).map(r=>({id:r.id,left:-r.total}));
   const creditors=results.filter(r=>r.total>0).map(r=>({id:r.id,left:r.total}));
+  if(tableTotal)creditors.push({id:null,left:tableTotal});
   const transfers=[]; let i=0,j=0;
   while(i<debtors.length && j<creditors.length) {
     const n=Math.min(debtors[i].left,creditors[j].left);
@@ -127,5 +130,5 @@ export function calculate(match) {
     debtors[i].left-=n;creditors[j].left-=n;
     if(!debtors[i].left)i++;if(!creditors[j].left)j++;
   }
-  return {results,pots,transfers};
+  return {results,pots,transfers,tableTotal};
 }

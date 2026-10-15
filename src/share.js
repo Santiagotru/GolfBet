@@ -9,7 +9,7 @@ export function whatsappText(match){
   if(g.medal?.enabled){
     lines.push('','*Medal · score neto*');let rank=1;
     for(const tied of medalGroups(match.players)){tied.forEach(p=>lines.push(`${rank}° ${name(p.name)} · ${p.npt?'NPT':parseScore(p.net)}${tied.length>1?' (empate)':''}`));rank+=tied.length;}
-    if(g.medal.nptPenalty>0)lines.push(`Penalidad adicional NPT: ${currency(Math.round(g.medal.nptPenalty*100))} por jugador.`);
+    if(g.medal.nptPenalty>0)lines.push(`Penalidad adicional NPT: ${currency(Math.round(g.medal.nptPenalty*100))} por jugador · para la mesa, no se reparte.`);
   }
   if(g.laguneada?.enabled){
     lines.push('','*Laguneada · score de equipo*');let lastScore,rank;
@@ -21,9 +21,10 @@ export function whatsappText(match){
   }
   for(const key of ['ida','vuelta'])if(g[key]?.enabled)lines.push('',`*${key==='ida'?'Ida':'Vuelta'}*`,`Ganadores: ${g[key].winners.map(id=>names[id]).join(', ')}`);
   for(const a of g.approaches||[])if(a.enabled)lines.push('',`*Approach · hoyo ${a.hole}*`,`Ganadores: ${a.winners.map(id=>names[id]).join(', ')}`);
+  if(r.tableTotal)lines.push('',`*Para la mesa: ${currency(r.tableTotal)}*`);
   lines.push('','*Transferencias sugeridas*');
   if(!r.transfers.length)lines.push('Todos saldados.');
-  r.transfers.forEach(t=>lines.push(`${names[t.from]} → ${names[t.to]}: ${currency(t.amount)}`));
+  r.transfers.forEach(t=>lines.push(`${names[t.from]} → ${t.to===null?'La mesa':names[t.to]}: ${currency(t.amount)}`));
   lines.push('','GolfBet · Montos en pesos argentinos');
   return lines.join('\n');
 }
