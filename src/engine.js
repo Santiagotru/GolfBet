@@ -18,6 +18,11 @@ function groups(items, score) {
       return out;
     }, []);
 }
+export function parseScore(value) {
+  if(value==null || String(value).trim()==='')return NaN;
+  return Number(String(value).trim().replace('−','-').replace(',','.'));
+}
+export const medalGroups = players => groups(players,p=>p.npt?Infinity:parseScore(p.net));
 export function calculate(match) {
   const players = match.players || [];
   if (players.length < 2) fail('Agregá al menos dos jugadores.');
@@ -44,13 +49,14 @@ export function calculate(match) {
   for (const key of ['ida','vuelta']) if (games[key]?.enabled) fixed(key==='ida'?'Ida · 9 hoyos':'Vuelta · 9 hoyos',games[key].amount,games[key].winners);
   if (games.medal?.enabled) {
     const c=games.medal;
-    if (players.some(p=>p.net === '' || p.net == null || !Number.isFinite(Number(p.net)))) fail('Completá el score neto de todos los jugadores para Medal.');
-    const ranked=groups(players,p=>Number(p.net));
+    if (players.every(p=>p.npt)) fail('Medal necesita al menos una tarjeta presentada para repartir premios.');
+    if (players.some(p=>!p.npt && !Number.isFinite(parseScore(p.net)))) fail('Completá el score neto de todos los jugadores para Medal.');
+    const ranked=medalGroups(players);
     const policies = c.policies || [{mode:'prize',percent:100}];
     const charges=new Map(), weights=new Map();
     let position=0, payingPosition=0;
     for (const tied of ranked) {
-      const slots = tied.map((_,i)=>policies[position+i] || {mode:'pay'});
+      const slots = tied.map((p,i)=>p.npt?{mode:'pay'}:policies[position+i] || {mode:'pay'});
       const prizePercent=slots.reduce((sum,s)=>sum+(s.mode==='prize'?Number(s.percent):0),0);
       if (slots.some(s=>!['pay','exempt','prize'].includes(s.mode) || (s.mode==='prize' && (!Number.isFinite(Number(s.percent)) || Number(s.percent)<0 || Number(s.percent)>100))) || !Number.isFinite(prizePercent)) fail('Revisá las reglas de puestos de Medal.');
       let charge=0;
@@ -70,20 +76,26 @@ export function calculate(match) {
     }
     const totalWeight=[...weights.values()].reduce((a,b)=>a+b,0);
     if (Math.abs(totalWeight-100)>0.000001) fail('Los porcentajes de los puestos presentes en Medal deben sumar 100%.');
-    const pot=[...charges.values()].reduce((a,b)=>a+b,0);
-    const recipients=players.filter(p=>weights.get(p.id)>0).map(p=>({id:p.id,raw:pot*weights.get(p.id)/100}));
-    const prizes=new Map(recipients.map(p=>[p.id,Math.floor(p.raw)]));
-    let cents=pot-[...prizes.values()].reduce((a,b)=>a+b,0);
-    recipients.sort((a,b)=>(b.raw-Math.floor(b.raw))-(a.raw-Math.floor(a.raw)) || a.id.localeCompare(b.id));
-    for(let i=0;i<cents;i++) prizes.set(recipients[i].id,prizes.get(recipients[i].id)+1);
-    record('Medal · neto',charges,prizes);
+    function award(label, charges){
+      const pot=[...charges.values()].reduce((a,b)=>a+b,0);
+      const recipients=players.filter(p=>weights.get(p.id)>0).map(p=>({id:p.id,raw:pot*weights.get(p.id)/100}));
+      const prizes=new Map(recipients.map(p=>[p.id,Math.floor(p.raw)]));
+      const cents=pot-[...prizes.values()].reduce((a,b)=>a+b,0);
+      recipients.sort((a,b)=>(b.raw-Math.floor(b.raw))-(a.raw-Math.floor(a.raw)) || a.id.localeCompare(b.id));
+      for(let i=0;i<cents;i++) prizes.set(recipients[i].id,prizes.get(recipients[i].id)+1);
+      record(label,charges,prizes);
+    }
+    award('Medal · neto',charges);
+    const penalty=money(c.nptPenalty ?? 0);
+    if(penalty && players.some(p=>p.npt))award('Medal · penalidad NPT',new Map(players.map(p=>[p.id,p.npt?penalty:0])));
+
   }
   if (games.laguneada?.enabled) {
     const c=games.laguneada, teams=match.teams || [];
     if (teams.length<2 || new Set(teams.map(t=>t.id)).size!==teams.length) fail('Laguneada necesita al menos dos equipos distintos.');
     if (players.some(p=>!teams.some(t=>t.id===p.team)) || teams.some(t=>!players.some(p=>p.team===t.id))) fail('Asigná cada jugador a un equipo y evitá equipos vacíos.');
-    if (teams.some(t=>t.score==='' || t.score==null || !Number.isFinite(Number(t.score)))) fail('Completá los scores de todos los equipos.');
-    const ranked=groups(teams,t=>Number(t.score)), charges=new Map();
+    if (teams.some(t=>!Number.isFinite(parseScore(t.score)))) fail('Completá los scores de todos los equipos.');
+    const ranked=groups(teams,t=>parseScore(t.score)), charges=new Map();
     let position=0;
     ranked.forEach((tied,index)=>{
       const multiplier=c.tieMode==='same'?position:position+(tied.length-1)/2;

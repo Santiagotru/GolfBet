@@ -1,12 +1,26 @@
-import {calculate} from './engine.js';
+import {calculate,medalGroups,parseScore} from './engine.js';
 export function whatsappText(match){
   const r=calculate(match),currency=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(n/100);
   const name=s=>String(s).replace(/[\r\n*_~`]/g,' ').trim();
   const names=Object.fromEntries(match.players.map(p=>[p.id,name(p.name)]));
   const lines=[`⛳ *${name(match.name)}*`,match.date.split('-').reverse().join('/'),'','*Liquidación*'];
-  r.results.forEach(p=>lines.push(`${name(p.name)}: ${p.total>0?'cobra':p.total<0?'paga':'saldado'} ${currency(Math.abs(p.total))}`));
-  lines.push('','*Desglose por jugador*');
-  r.results.forEach(p=>{lines.push(`\n*${name(p.name)}*`);p.entries.forEach(e=>lines.push(`${e.label}: aporta ${currency(e.paid)} · premio ${currency(e.won)} · saldo ${currency(e.net)}`));});
+  r.results.forEach(p=>lines.push(`${name(p.name)}: ${p.total>0?'gana':p.total<0?'pierde':'saldado'} ${currency(Math.abs(p.total))}`));
+  const g=match.games;
+  if(g.medal?.enabled){
+    lines.push('','*Medal · score neto*');let rank=1;
+    for(const tied of medalGroups(match.players)){tied.forEach(p=>lines.push(`${rank}° ${name(p.name)} · ${p.npt?'NPT':parseScore(p.net)}${tied.length>1?' (empate)':''}`));rank+=tied.length;}
+    if(g.medal.nptPenalty>0)lines.push(`Penalidad adicional NPT: ${currency(Math.round(g.medal.nptPenalty*100))} por jugador.`);
+  }
+  if(g.laguneada?.enabled){
+    lines.push('','*Laguneada · score de equipo*');let lastScore,rank;
+    [...match.teams].sort((a,b)=>parseScore(a.score)-parseScore(b.score)||a.id.localeCompare(b.id)).forEach((t,i)=>{
+      const score=parseScore(t.score);if(score!==lastScore)rank=i+1;lastScore=score;
+      const members=match.players.filter(p=>p.team===t.id).map(p=>name(p.name)).join(', ');
+      lines.push(`${rank}° ${name(t.name)} · ${score}`,`Integrantes: ${members}`);
+    });
+  }
+  for(const key of ['ida','vuelta'])if(g[key]?.enabled)lines.push('',`*${key==='ida'?'Ida':'Vuelta'}*`,`Ganadores: ${g[key].winners.map(id=>names[id]).join(', ')}`);
+  for(const a of g.approaches||[])if(a.enabled)lines.push('',`*Approach · hoyo ${a.hole}*`,`Ganadores: ${a.winners.map(id=>names[id]).join(', ')}`);
   lines.push('','*Transferencias sugeridas*');
   if(!r.transfers.length)lines.push('Todos saldados.');
   r.transfers.forEach(t=>lines.push(`${names[t.from]} → ${names[t.to]}: ${currency(t.amount)}`));

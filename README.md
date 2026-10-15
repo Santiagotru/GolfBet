@@ -84,3 +84,11 @@ Listado de hasta 100 partidas por categoría (propias, públicas, compartidas), 
 Seleccionar el acceso en La partida y guardar. Compartidas admite hasta 50 correos separados por comas, normalizados a minúsculas; los invitados deben iniciar sesión con esas cuentas de Google verificadas. Cambiar a privada revoca todos los invitados. Solo el creador puede modificar la configuración o resultados. El texto para WhatsApp exporta los resultados que el usuario elige copiar y no contiene enlaces a partidas privadas.
 
 La partida existente antes de incorporar privacidad se migró de forma aditiva a `visibility: public` y `sharedEmails: []`, conservando su acceso previo y sus resultados. Su creador puede hacerla privada desde la interfaz. Las consultas están filtradas por permisos antes de traer documentos, y no necesitan índices compuestos.
+
+## Scores negativos, NPT y resultados para WhatsApp
+
+Los scores individuales y de equipo usan campos de texto con teclado completo para poder ingresar el signo menos en Android. Aceptan números negativos y coma decimal; un campo vacío no se interpreta como cero.
+
+NPT significa no presentó tarjeta: se marca por jugador y solo afecta Medal. Todos los NPT quedan últimos empatados, no reciben premios y pagan el aporte fijo o el promedio de sus escalones. La penalidad NPT es un monto adicional por jugador (0 por defecto), repartido según los porcentajes de premios de Medal, con una línea separada en el desglose. Debe existir al menos una tarjeta presentada y los porcentajes de los puestos premiados con tarjeta deben sumar 100%. NPT no impide ganar ida, vuelta, laguneada o approach.
+
+Copiar para WhatsApp incluye cuánto gana/pierde cada jugador, Medal ordenado con scores y NPT, laguneada ordenada con scores e integrantes de equipos, ganadores de ida/vuelta y de cada hoyo de approach, y transferencias sugeridas. No envía mensajes automáticamente.
