@@ -22,9 +22,6 @@ export function whatsappText(match){
   for(const key of ['ida','vuelta'])if(g[key]?.enabled)lines.push('',`*${key==='ida'?'Ida':'Vuelta'}*`,`Ganadores: ${g[key].winners.map(id=>names[id]).join(', ')}`);
   for(const a of g.approaches||[])if(a.enabled)lines.push('',`*Approach · hoyo ${a.hole}*`,`Ganadores: ${a.winners.map(id=>names[id]).join(', ')}`);
   if(r.tableTotal)lines.push('',`*Para la mesa: ${currency(r.tableTotal)}*`);
-  lines.push('','*Transferencias sugeridas*');
-  if(!r.transfers.length)lines.push('Todos saldados.');
-  r.transfers.forEach(t=>lines.push(`${names[t.from]} → ${t.to===null?'La mesa':names[t.to]}: ${currency(t.amount)}`));
   lines.push('','GolfBet · Montos en pesos argentinos');
   return lines.join('\n');
 }
