@@ -118,6 +118,34 @@ export function calculate(match) {
     if(!Number.isInteger(hole)||hole<1||hole>18||holes.has(hole)) fail('Los hoyos de Approach deben ser distintos y estar entre 1 y 18.');
     holes.add(hole); fixed(`Approach · hoyo ${hole}`,a.amount,a.winners);
   }
+  let skins=null;
+  if(games.skins?.enabled){
+    const c=games.skins, amount=money(c.amount);
+    const start=c.range==='back'?10:1,end=c.range==='front'?9:18;
+    const played=(c.holes||[]).filter(h=>Number(h.hole)>=start && Number(h.hole)<=end).sort((a,b)=>Number(a.hole)-Number(b.hole));
+    if(played.length!==end-start+1 || new Set(played.map(h=>Number(h.hole))).size!==played.length)fail('Completá todos los hoyos del recorrido de Skins.');
+    const prizes=new Map(ids.map(id=>[id,0])),details=[];
+    let pending=0,refundPerPlayer=0;
+    for(const h of played){
+      let winner=null;
+      if(h.winner!=='tie' && !ids.includes(h.winner))fail(`Indicá el ganador o empate de Skins del hoyo ${h.hole}.`);
+      if(h.winner!=='tie')winner=h.winner;
+      pending++;
+      if(winner){
+        const pot=pending*amount*players.length;
+        prizes.set(winner,prizes.get(winner)+pot);
+        details.push({hole:Number(h.hole),winner,skins:pending,pot,status:'won'});pending=0;
+      }else if(c.carry!==false){
+        details.push({hole:Number(h.hole),winner:null,skins:pending,pot:pending*amount*players.length,status:'carry'});
+      }else{
+        ids.forEach(id=>prizes.set(id,prizes.get(id)+amount));refundPerPlayer+=amount;
+        details.push({hole:Number(h.hole),winner:null,skins:1,pot:amount*players.length,status:'refunded'});pending=0;
+      }
+    }
+    if(pending){const refund=pending*amount;ids.forEach(id=>prizes.set(id,prizes.get(id)+refund));refundPerPlayer+=refund;}
+    skins={holes:details,refundPerPlayer,pending,amount};
+    record('Skins · '+played.length+' hoyos',new Map(ids.map(id=>[id,amount*played.length])),prizes);
+  }
   if (!pots.length) fail('Activá al menos una apuesta.');
   const results=[...rows.values()].sort((a,b)=>b.total-a.total || a.name.localeCompare(b.name));
   const debtors=results.filter(r=>r.total<0).map(r=>({id:r.id,left:-r.total}));
@@ -130,5 +158,5 @@ export function calculate(match) {
     debtors[i].left-=n;creditors[j].left-=n;
     if(!debtors[i].left)i++;if(!creditors[j].left)j++;
   }
-  return {results,pots,transfers,tableTotal};
+  return {results,pots,transfers,tableTotal,skins};
 }

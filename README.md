@@ -92,3 +92,9 @@ Los scores individuales y de equipo usan campos de texto con teclado completo pa
 NPT significa no presentó tarjeta: se marca por jugador y solo afecta Medal. Todos los NPT quedan últimos empatados, no reciben premios y pagan el aporte fijo o el promedio de sus escalones. La penalidad NPT es un monto adicional por jugador (0 por defecto), que queda para la mesa y no incrementa los premios de Medal, con una línea separada en el desglose. La liquidación incluye el total para la mesa y transferencias hacia ella. Debe existir al menos una tarjeta presentada y los porcentajes de los puestos premiados con tarjeta deben sumar 100%. NPT no impide ganar ida, vuelta, laguneada o approach.
 
 Copiar para WhatsApp incluye cuánto gana/pierde cada jugador, Medal ordenado con scores y NPT, laguneada ordenada con scores e integrantes de equipos, ganadores de ida/vuelta y de cada hoyo de approach, sin transferencias sugeridas. No envía mensajes automáticamente.
+
+## Skins Game
+
+Activar en las apuestas del día. Configurar el aporte por jugador y hoyo, recorrido (18 hoyos, ida 1–9 o vuelta 10–18) y acumulación de empates. Cargar directamente el ganador de cada hoyo o marcar empate; Pendiente bloquea la liquidación. No se cargan scores de Skins.
+
+Todos los jugadores aportan por hoyo. Con acumulación, el siguiente ganador único cobra el pozo del hoyo más los anteriores empatados. Sin acumulación se devuelve el aporte de cada hoyo empatado. Los pozos aún pendientes al final del recorrido se devuelven por igual a quienes aportaron. Las devoluciones están incluidas en los saldos; no son premios nuevos. NPT de Medal no excluye de Skins. El desglose individual, CSV y mensaje para WhatsApp incluyen Skins, con detalle de hoyos y devoluciones en pantalla y WhatsApp.
