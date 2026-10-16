@@ -85,3 +85,25 @@ test('Backend rechaza snapshot de ranking adulterado y alta fuera del período',
  await saveRankingToStore(db,{id:'r',name:'R',startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'public',contributorEmails:[]},user);
  for(const variant of ['date','snapshot']){const m={...data(),id:'bad-'+variant,ownerName:'Owner',currency:'ARS',rankingIds:['r'],date:variant==='date'?'2025-01-01':'2026-06-01'};const e={...rankingEntry(m,user),updatedAt:serverTimestamp()};if(variant==='snapshot')e.name='Adulterado';const batch=writeBatch(db);batch.set(doc(db,'matches',m.id),m);batch.set(doc(db,'rankings','r','entries',m.id),e);await assertFails(batch.commit());}
 });
+
+test('Correo opcional, edición central por creador y partidas de otro autor conservan identidad y saldos',async()=>{
+ const {saveRankingToStore,rankingDetailsFromStore,updateRankingPlayerFromStore,resolveMatchProfiles,listRankingsFromStore}=await import('../src/rankings-store.js');
+ const {aggregateRanking}=await import('../src/rankings.js');
+ const owner={uid:'owner'},db=env.authenticatedContext('owner').firestore();
+ const rank={id:'optional',name:'Opcional',startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'private',contributorEmails:['author@example.com']};await saveRankingToStore(db,rank,owner);
+ const author={uid:'author',email:'author@example.com',emailVerified:true},authorDb=env.authenticatedContext('author',{email:author.email,email_verified:true}).firestore();
+ const m={...data(),id:'optional1',rankingIds:['optional'],players:[{id:'a',name:'Ana',net:69},{id:'b',name:'Ana',net:72}],games:{medal:{enabled:true,mode:'step',step:1000,policies:[{mode:'prize',percent:100}]}}};delete m.ownerId;
+ assert.equal((await saveMatchToStore(authorDb,m,author)).warning,undefined);
+ const second={...m,id:'optional2'};assert.equal((await saveMatchToStore(authorDb,second,author)).warning,undefined);
+ await assert.rejects(updateRankingPlayerFromStore(authorDb,'optional','a','ana@example.com',author),/creador/);
+ await assertFails(updateDoc(doc(authorDb,'rankings','optional','players','a'),{email:'ana@example.com'}));
+ await updateRankingPlayerFromStore(db,'optional','a','ana@example.com',owner);
+ const detail=await rankingDetailsFromStore(db,'optional'),totals=aggregateRanking(detail.ranking,detail.entries,detail.profiles);
+ assert.equal(totals.rows.length,2);assert.equal(totals.rows[0].email,'ana@example.com');assert.equal(totals.rows[0].played,2);assert.equal(totals.rows[0].total,200000);
+ for(const id of ['optional1','optional2']){const saved=(await getDoc(doc(authorDb,'matches',id))).data();const resolved=await resolveMatchProfiles(authorDb,saved);assert.equal(resolved.players[0].email,'ana@example.com');assert.equal(resolved.players[0].net,69);assert.equal(resolved.players[1].email,'');}
+ const ana={uid:'ana',email:'ana@example.com',emailVerified:true},anaDb=env.authenticatedContext('ana',{email:ana.email,email_verified:true}).firestore();assert.equal((await listRankingsFromStore(anaDb,ana))[0].participating,true);
+ // Guardar una versión anterior no pisa el correo del perfil central.
+ m.ownerId=author.uid;await saveMatchToStore(authorDb,m,author);assert.equal((await getDoc(doc(db,'rankings','optional','players','a'))).data().email,'ana@example.com');
+ await updateRankingPlayerFromStore(db,'optional','a','nuevo@example.com',owner);await assertFails(getDoc(doc(anaDb,'rankings','optional')));
+ await updateRankingPlayerFromStore(db,'optional','a','',owner);assert.equal((await getDoc(doc(db,'rankings','optional','players','a'))).data().email,'');
+});

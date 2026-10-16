@@ -1,5 +1,5 @@
 import {collection,doc,getDoc,getDocs,query,where,limit,setDoc,updateDoc,serverTimestamp,writeBatch} from 'firebase/firestore';
-import {normalizeEmail,validateRanking,canContributeRanking,validateRankingMatch,rankingEntry} from './rankings.js';
+import {normalizeEmail,validateRanking,canContributeRanking,validateRankingMatch,rankingEntry,playerKey,validEmail} from './rankings.js';
 export async function listRankingsFromStore(db,user){
   const queries=[query(collection(db,'rankings'),where('ownerId','==',user.uid),limit(100)),query(collection(db,'rankings'),where('visibility','==','public'),limit(100))];
   const email=user.emailVerified?normalizeEmail(user.email):'';
@@ -19,15 +19,16 @@ export async function saveRankingToStore(db,r,user){
 export async function loadRankingFromStore(db,id){const s=await getDoc(doc(db,'rankings',id));if(!s.exists())throw new Error('El ranking no existe.');return {...s.data(),id:s.id};}
 export async function rankingDetailsFromStore(db,id){
   const [ranking,entries,profiles]=await Promise.all([loadRankingFromStore(db,id),getDocs(collection(db,'rankings',id,'entries')),getDocs(collection(db,'rankings',id,'players'))]);
-  return {ranking,entries:entries.docs.map(d=>({...d.data(),id:d.id})),profiles:profiles.docs.map(d=>d.data())};
+  return {ranking,entries:entries.docs.map(d=>({...d.data(),id:d.id})),profiles:profiles.docs.map(d=>({...d.data(),participantId:d.id}))};
 }
 export async function rankingRosterFromStore(db,ids){
-  const snapshots=await Promise.all(ids.map(id=>getDocs(collection(db,'rankings',id,'players'))));const people=new Map();snapshots.forEach(s=>s.docs.forEach(d=>people.set(d.id,d.data())));return [...people.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const snapshots=await Promise.all(ids.map(id=>getDocs(collection(db,'rankings',id,'players'))));const people=new Map();snapshots.forEach(s=>s.docs.forEach(d=>people.set(d.id,{...d.data(),participantId:d.id})));return [...people.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 export async function persistMatchWithRankings(db,match,user,previous){
   const ids=[...new Set(match.rankingIds||[])],ranks=await Promise.all(ids.map(id=>loadRankingFromStore(db,id)));
   validateRankingMatch({...match,rankingIds:ids},ranks);
   if(ranks.some(r=>!canContributeRanking(r,user)))throw new Error('No tenés permiso para agregar partidas a uno de los rankings seleccionados. Quitá esa asociación o pedí acceso al creador.');
+  match.players.forEach(p=>{p.participantId ||= playerKey(p);});
   const {createdAt,updatedAt,...fields}=match;
   const data={...fields,rankingIds:ids,ownerId:user.uid,ownerName:user.displayName||'Jugador',updatedAt:serverTimestamp()};
   const batch=writeBatch(db),ref=doc(db,'matches',match.id);
@@ -35,8 +36,38 @@ export async function persistMatchWithRankings(db,match,user,previous){
   for(const id of ids)batch.set(doc(db,'rankings',id,'entries',match.id),{...rankingEntry(data,user),updatedAt:serverTimestamp()});
   for(const id of previous?.rankingIds||[])if(!ids.includes(id))batch.delete(doc(db,'rankings',id,'entries',match.id));
   await batch.commit();
-  // Registrar participantes en lotes pequeños para respetar el límite de lecturas de reglas.
-  try{for(const id of ids)for(let i=0;i<match.players.length;i+=6){const registration=writeBatch(db);for(const player of match.players.slice(i,i+6)){const email=normalizeEmail(player.email);registration.set(doc(db,'rankings',id,'players',email),{name:player.name,email});registration.set(doc(db,'rankingAccess',email,'rankings',id),{rankingId:id,email});}await registration.commit();}}
-  catch{return {warning:'La partida se guardó, pero faltó registrar participantes del ranking. Volvé a guardar para completar el registro.'};}
+  // El perfil conserva su identidad aunque el correo cambie o esté vacío.
+  try{for(const id of ids)for(const player of match.players){
+    const key=playerKey(player),ref=doc(db,'rankings',id,'players',key),existing=await getDoc(ref);
+    if(existing.exists())continue;
+    const email=normalizeEmail(player.email),registration=writeBatch(db);
+    registration.set(ref,{name:player.name,email});
+    if(email)registration.set(doc(db,'rankingAccess',email,'rankings',id),{rankingId:id,email,playerId:key});
+    await registration.commit();
+  }}catch{return {warning:'La partida se guardó, pero faltó registrar participantes del ranking. Volvé a guardar para completar el registro.'};}
   return {};
+}
+
+export async function updateRankingPlayerFromStore(db,rankId,playerId,value,user){
+  const rank=await loadRankingFromStore(db,rankId);
+  if(rank.ownerId!==user.uid)throw new Error('Solo el creador puede editar el correo.');
+  const email=normalizeEmail(value);
+  if(email&&!validEmail(email))throw new Error('Ingresá un correo válido o dejalo vacío.');
+  const profiles=await getDocs(collection(db,'rankings',rankId,'players'));
+  if(email&&profiles.docs.some(d=>d.id!==playerId&&d.data().email===email))throw new Error('Ese correo ya pertenece a otro jugador.');
+  const ref=doc(db,'rankings',rankId,'players',playerId),snapshot=await getDoc(ref);
+  if(!snapshot.exists())throw new Error('El jugador no existe.');
+  const previous=snapshot.data().email,batch=writeBatch(db);
+  batch.update(ref,{email});
+  if(previous&&previous!==email)batch.delete(doc(db,'rankingAccess',previous,'rankings',rankId));
+  if(email)batch.set(doc(db,'rankingAccess',email,'rankings',rankId),{rankingId:rankId,email,playerId});
+  await batch.commit();
+}
+export async function resolveMatchProfiles(db,match){
+  for(const rankId of match.rankingIds||[]){
+    try{const profiles=await rankingRosterFromStore(db,[rankId]);const map=new Map(profiles.map(p=>[playerKey(p),p]));
+      match.players=match.players.map(p=>{const profile=map.get(playerKey(p));return profile?{...p,participantId:profile.participantId,email:profile.email}:p;});
+    }catch(e){if(e.code!=='permission-denied')throw e;}
+  }
+  return match;
 }

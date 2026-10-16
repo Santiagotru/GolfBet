@@ -1,4 +1,4 @@
-import {listRankingsFromStore,saveRankingToStore,rankingDetailsFromStore,rankingRosterFromStore} from './rankings-store.js';
+import {listRankingsFromStore,saveRankingToStore,rankingDetailsFromStore,rankingRosterFromStore,updateRankingPlayerFromStore,resolveMatchProfiles} from './rankings-store.js';
 import {saveMatchToStore} from './persistence.js';
 import {initializeApp} from 'firebase/app';
 import {getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged} from 'firebase/auth';
@@ -26,10 +26,12 @@ export async function listMatches(){
 export async function loadMatch(id){
   const snapshot=await getDoc(doc(db,'matches',id));
   if(!snapshot.exists())throw new Error('La partida no existe.');
-  return {...snapshot.data(),id:snapshot.id};
+  return resolveMatchProfiles(db,{...snapshot.data(),id:snapshot.id});
 }
 
 export const listRankings=()=>listRankingsFromStore(db,auth.currentUser);
 export const saveRanking=(ranking,user)=>saveRankingToStore(db,ranking,user);
 export const rankingDetails=id=>rankingDetailsFromStore(db,id);
 export const rankingRoster=ids=>rankingRosterFromStore(db,ids);
+
+export const updateRankingPlayer=(rankId,playerId,email,user)=>updateRankingPlayerFromStore(db,rankId,playerId,email,user);

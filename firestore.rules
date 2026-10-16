@@ -110,20 +110,27 @@ service cloud.firestore {
         allow delete: if signedIn() && resource.data.ownerId == request.auth.uid
           && (!existsAfter(/databases/$(database)/documents/matches/$(matchId)) || !(rankId in getAfter(/databases/$(database)/documents/matches/$(matchId)).data.get('rankingIds', [])));
       }
-      match /players/{playerEmail} {
+      match /players/{playerId} {
+        function validProfile() {
+          let p = request.resource.data;
+          return p.keys().hasOnly(['email','name']) && p.email is string
+            && (p.email == '' || (p.email == p.email.lower() && p.email.matches('^[^/@ ]+@[^/@ ]+[.][^/@ ]+$')))
+            && p.name is string && p.name.size() > 0 && p.name.size() <= 80;
+        }
         allow read: if signedIn() && mayReadRanking(rankId);
-        allow create, update: if signedIn() && mayContribute(rankId)
-          && request.resource.data.keys().hasOnly(['email','name']) && request.resource.data.email == playerEmail
-          && playerEmail == playerEmail.lower() && playerEmail.matches('^[^/@ ]+@[^/@ ]+[.][^/@ ]+$')
-          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80;
+        allow create: if signedIn() && mayContribute(rankId) && validProfile();
+        allow update: if signedIn() && validProfile() &&
+          (get(/databases/$(database)/documents/rankings/$(rankId)).data.ownerId == request.auth.uid
+            || (mayContribute(rankId) && request.resource.data == resource.data));
       }
     }
     match /rankingAccess/{playerEmail}/rankings/{rankId} {
       allow read: if signedIn() && email() == playerEmail;
       allow create, update: if signedIn() && mayContribute(rankId)
-        && request.resource.data.keys().hasOnly(['rankingId','email'])
+        && request.resource.data.keys().hasOnly(['rankingId','email','playerId'])
         && request.resource.data.rankingId == rankId && request.resource.data.email == playerEmail
-        && getAfter(/databases/$(database)/documents/rankings/$(rankId)/players/$(playerEmail)).data.email == playerEmail;
+        && getAfter(/databases/$(database)/documents/rankings/$(rankId)/players/$(request.resource.data.get('playerId', playerEmail))).data.email == playerEmail;
+      allow delete: if signedIn() && get(/databases/$(database)/documents/rankings/$(rankId)).data.ownerId == request.auth.uid;
     }
   }
 }
