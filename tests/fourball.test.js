@@ -14,3 +14,5 @@ test('Fourball valida parejas de dos y scores completos',()=>{const m=fixture();
 test('Fourball no exige mismas parejas que equipos laguneada',()=>{const m=fixture();m.players.forEach(p=>p.team='otro');balanced(calculate(m));});
 test('WhatsApp muestra moneda, scores e integrantes de Fourball',()=>{const text=whatsappText(fixture());assert.match(text,/USD/);assert.match(text,/Fourball · score neto por pareja/);assert.match(text,/1° Pareja 0 · 68/);assert.match(text,/Jugador 0A, Jugador 0B/);assert.doesNotMatch(text,/Transferencias sugeridas/);});
 test('Monedas ARS/USD/UYU mantienen los importes sin conversión',()=>{for(const code of ['ARS','USD','UYU']){const m=fixture();m.currency=code;assert.equal(total(calculate(m),'p0a'),300000);assert.match(formatMoney(123456,code),new RegExp(code));}assert.throws(()=>calculate({...fixture(),currency:'XXX'}),/moneda válida/);});
+
+test('Fourball usa monto inicial independiente por jugador',()=>{const m=fixture();m.games.fourball.startAmount=2000;const r=calculate(m);assert.equal(total(r,'p1a'),-200000);assert.equal(total(r,'p2b'),-300000);assert.equal(total(r,'p0a'),500000);balanced(r);});

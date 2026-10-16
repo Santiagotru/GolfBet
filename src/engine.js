@@ -69,7 +69,7 @@ export function calculate(match) {
         const slotCharges=slots.map(s=>{
           if(s.mode!=='pay')return 0;
           payingPosition++;
-          return c.mode==='fixed'?money(c.amount):money(c.step)*payingPosition;
+          return c.mode==='fixed'?money(c.amount):money(c.startAmount==null||c.startAmount===''?c.step:c.startAmount)+money(c.step)*(payingPosition-1);
         });
         charge = c.tieMode==='same' ? slotCharges[0] : slotCharges.reduce((a,b)=>a+b,0)/tied.length;
       }
@@ -100,10 +100,13 @@ export function calculate(match) {
     if (players.some(p=>!teams.some(t=>t.id===p.team)) || teams.some(t=>!players.some(p=>p.team===t.id))) fail('Asigná cada jugador a un equipo y evitá equipos vacíos.');
     if (teams.some(t=>!Number.isFinite(parseScore(t.score)))) fail('Completá los scores de todos los equipos.');
     const ranked=groups(teams,t=>parseScore(t.score)), charges=new Map();
-    let position=0;
+    let position=0,payingPosition=0;
     ranked.forEach((tied,index)=>{
       const multiplier=c.tieMode==='same'?position:position+(tied.length-1)/2;
-      const amount=c.mode==='fixed'?money(c.amount):(index===0?0:Math.round(money(c.step)*multiplier));
+      const customStart=c.startAmount!=null && c.startAmount!=='';
+      const payerIndex=payingPosition+(c.tieMode==='same'?0:(tied.length-1)/2);
+      const amount=c.mode==='fixed'?money(c.amount):(index===0?0:customStart?Math.round(money(c.startAmount)+money(c.step)*payerIndex):Math.round(money(c.step)*multiplier));
+      if(index>0)payingPosition+=tied.length;
       players.filter(p=>tied.some(t=>t.id===p.team)).forEach(p=>charges.set(p.id,amount));
       position+=tied.length;
     });

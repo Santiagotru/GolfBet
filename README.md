@@ -110,3 +110,7 @@ Fourball necesita al menos dos parejas distintas y exactamente dos jugadores por
 La moneda se selecciona en La partida. ARS/USD/UYU se muestran explícitamente en saldos, pozos, CSV y WhatsApp para evitar ambigüedad del símbolo $. No se convierten importes entre monedas. Documentos anteriores sin moneda se interpretan como ARS; las reglas de Firestore aceptan los tres códigos y conservan compatibilidad con esos documentos.
 
 La paleta usa azul marino #191b45, celeste, blanco y dorado #e5aa3e, inspirada en el flyer proporcionado. No se incorporaron el logo ni la fotografía del club.
+
+## Monto inicial del escalonado
+
+Medal, Fourball y laguneada admiten `startAmount` independiente de `step`: inicio 2000 e incremento 1000 producen aportes 2000, 3000, 4000 por jugador. Medal y Fourball no cuentan puestos premiados o exentos; los empates promedian los importes ocupados. Inicio 0 es válido. Vacío mantiene el comportamiento anterior (inicio igual al incremento; en laguneada conserva la numeración histórica si empatan equipos ganadores). Con inicio explícito en laguneada se cuenta desde el primer equipo que paga. No hay conversión de moneda ni cambios automáticos en partidas guardadas.

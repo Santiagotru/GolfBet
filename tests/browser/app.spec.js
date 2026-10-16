@@ -72,3 +72,5 @@ test('Fourball completo liquida por jugador y conserva selección al guardar',as
  await page.getByRole('button',{name:'Ver liquidación'}).click();await expect(page.getByRole('heading',{name:'Resultados de Fourball'})).toBeVisible();await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('USD');await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('1.000,00');
  await page.getByRole('button',{name:'Todas las partidas'}).click();await page.locator('.match-card').click();await expect(page.locator('select[data-path="currency"]')).toHaveValue('USD');await expect(page.locator('input[data-path="games.fourball.enabled"]')).toBeChecked();
 });
+
+test('Monto inicial del Medal se configura separado del incremento',async({page})=>{await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.locator('input[data-path="games.medal.startAmount"]').fill('2000');await page.getByRole('button',{name:'Ver liquidación'}).click();await page.locator('.result-row').first().locator('summary').click();await expect(page.locator('.result-row').first()).toContainText('14.000,00');});
