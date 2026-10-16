@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {saveMatchToStore} from '../src/persistence.js';
 import {test,before,after,beforeEach} from 'node:test';
 import {readFileSync} from 'node:fs';
@@ -44,3 +45,43 @@ test('Guardar no permite sobrescribir una partida privada ajena',async()=>{
 });
 
 test('Permite guardar las tres monedas y documentos anteriores sin moneda',async()=>{const db=await create();for(const currency of ['ARS','USD','UYU'])await assertSucceeds(updateDoc(doc(db,'matches','match1'),{currency,updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(db,'matches','match1'),{currency:'EUR',updatedAt:serverTimestamp()}));});
+
+test('Rankings privados: invitado agrega su partida, participante la encuentra al entrar y otro usuario no puede leer',async()=>{
+ const {saveRankingToStore,rankingDetailsFromStore,listRankingsFromStore}=await import('../src/rankings-store.js');
+ const owner={uid:'owner',displayName:'Creador',email:'owner@gmail.com',emailVerified:true};const db=env.authenticatedContext(owner.uid,{email:owner.email,email_verified:true}).firestore();
+ const rank={id:'rank1',name:'Temporada',startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'private',contributorEmails:['invited@gmail.com']};await saveRankingToStore(db,rank,owner);
+ const invited={uid:'invited',displayName:'Invitado',email:'invited@gmail.com',emailVerified:true};const invitedDb=env.authenticatedContext(invited.uid,{email:invited.email,email_verified:true}).firestore();
+ const m={id:'linked1',name:'Partida invitada',date:'2026-06-01',currency:'ARS',holes:18,visibility:'private',sharedEmails:[],rankingIds:['rank1'],players:[{id:'a',name:'Ana',email:'ana@gmail.com',net:69},{id:'b',name:'Luis',email:'luis@gmail.com',net:72}],teams:[],games:{medal:{enabled:true,mode:'step',step:1000,policies:[{mode:'prize',percent:100}]}}};
+ const outcome=await saveMatchToStore(invitedDb,m,invited);if(outcome?.warning)throw new Error(outcome.warning);
+ const participant={uid:'ana',email:'ana@gmail.com',emailVerified:true},participantDb=env.authenticatedContext(participant.uid,{email:participant.email,email_verified:true}).firestore();
+ const found=await listRankingsFromStore(participantDb,participant);if(!found.some(r=>r.id==='rank1'&&r.participating&&!r.canContribute))throw new Error('No se descubrió el ranking del participante.');
+ await assert.rejects(saveMatchToStore(participantDb,{...m,id:'blocked'},participant),/permiso/);
+ const detail=await rankingDetailsFromStore(participantDb,'rank1');if(detail.entries.length!==1||detail.profiles.length!==2)throw new Error('Faltan partida o participantes.');
+ const other=env.authenticatedContext('other',{email:'other@gmail.com',email_verified:true}).firestore();await assertFails(getDoc(doc(other,'rankings','rank1')));await assertFails(getDoc(doc(other,'rankings','rank1','entries','linked1')));
+ await assert.rejects(saveRankingToStore(invitedDb,{...rank,ownerId:'owner',name:'No permitido'},invited),/creador/);await assertFails(updateDoc(doc(invitedDb,'rankings','rank1'),{name:'No permitido',updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(invitedDb,'matches','linked1'),{name:'Sin sincronizar',updatedAt:serverTimestamp()}));
+ m.ownerId=invited.uid;m.players[0].net=80;await saveMatchToStore(invitedDb,m,invited);const changed=await getDoc(doc(db,'rankings','rank1','entries','linked1'));if(changed.data().players[0].net!==80)throw new Error('No se sincronizó edición.');
+ m.rankingIds=[];await saveMatchToStore(invitedDb,m,invited);if((await getDoc(doc(db,'rankings','rank1','entries','linked1'))).exists())throw new Error('No se quitó la asociación.');
+});
+test('Ranking público admite partidas propias de terceros y rechaza moneda/fecha incorrectas',async()=>{
+ const {saveRankingToStore,listRankingsFromStore}=await import('../src/rankings-store.js');const owner={uid:'owner',displayName:'Owner'};const db=env.authenticatedContext('owner').firestore();
+ await saveRankingToStore(db,{id:'public1',name:'Abierto',startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'public',contributorEmails:[]},owner);
+ const outsider={uid:'outside',displayName:'Outside'},other=env.authenticatedContext('outside').firestore();if((await listRankingsFromStore(other,outsider)).length!==1)throw new Error('No se listó ranking público.');
+ const m={...data(),id:'publicmatch',rankingIds:['public1'],currency:'ARS',players:[{id:'a',name:'Ana',email:'ana@gmail.com'},{id:'b',name:'Luis',email:'luis@gmail.com'}]};delete m.ownerId;delete m.createdAt;delete m.updatedAt;
+ const outcome=await saveMatchToStore(other,m,outsider);if(outcome?.warning)throw new Error(outcome.warning);
+ await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'rankings','public1')));
+ await assert.rejects(saveMatchToStore(other,{...m,id:'foreign',currency:'USD'},outsider),/moneda/);await assert.rejects(saveMatchToStore(other,{...m,id:'old',date:'2025-01-01'},outsider),/período/);
+});
+test('Una partida se sincroniza con cinco rankings sin duplicados',async()=>{
+ const {saveRankingToStore}=await import('../src/rankings-store.js');const user={uid:'owner',displayName:'Owner'},db=env.authenticatedContext('owner').firestore();const ids=Array.from({length:5},(_,i)=>'r'+i);
+ for(const id of ids)await saveRankingToStore(db,{id,name:id,startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'public',contributorEmails:[]},user);
+ const m={...data(),id:'multi',currency:'ARS',rankingIds:ids,players:[{id:'a',name:'Ana',email:'ana@gmail.com'},{id:'b',name:'Luis',email:'luis@gmail.com'}]};delete m.ownerId;delete m.createdAt;delete m.updatedAt;
+ const outcome=await saveMatchToStore(db,m,user);if(outcome?.warning)throw new Error(outcome.warning);m.ownerId=user.uid;await saveMatchToStore(db,m,user);
+ for(const id of ids)if((await getDocs(collection(db,'rankings',id,'entries'))).size!==1)throw new Error('La partida se duplicó.');
+});
+
+test('Backend rechaza snapshot de ranking adulterado y alta fuera del período',async()=>{
+ const {saveRankingToStore}=await import('../src/rankings-store.js');const {writeBatch}=await import('firebase/firestore');const {rankingEntry}=await import('../src/rankings.js');const user={uid:'owner',displayName:'Owner'},db=env.authenticatedContext('owner').firestore();
+ await saveRankingToStore(db,{id:'r',name:'R',startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'public',contributorEmails:[]},user);
+ for(const variant of ['date','snapshot']){const m={...data(),id:'bad-'+variant,ownerName:'Owner',currency:'ARS',rankingIds:['r'],date:variant==='date'?'2025-01-01':'2026-06-01'};const e={...rankingEntry(m,user),updatedAt:serverTimestamp()};if(variant==='snapshot')e.name='Adulterado';const batch=writeBatch(db);batch.set(doc(db,'matches',m.id),m);batch.set(doc(db,'rankings','r','entries',m.id),e);await assertFails(batch.commit());}
+});

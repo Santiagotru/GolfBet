@@ -4,10 +4,49 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
+    function email() {
+      return request.auth.token.get('email_verified', false) ? request.auth.token.get('email', '').lower() : '';
+    }
+    function mayContribute(rankId) {
+      let r = get(/databases/$(database)/documents/rankings/$(rankId)).data;
+      return signedIn() && (r.ownerId == request.auth.uid || r.visibility == 'public' || (email() != '' && email() in r.contributorEmails));
+    }
+    function mayReadRanking(rankId) {
+      let r = get(/databases/$(database)/documents/rankings/$(rankId)).data;
+      return signedIn() && (r.ownerId == request.auth.uid || r.visibility == 'public' || (email() != '' && (email() in r.contributorEmails || exists(/databases/$(database)/documents/rankingAccess/$(email())/rankings/$(rankId)))));
+    }
+    function entryMatches(e, m) {
+      return e.id == m.id && e.ownerId == m.ownerId && e.name == m.name && e.ownerName == m.ownerName && e.date == m.date
+        && e.currency == m.get('currency', 'ARS') && e.players == m.players && e.teams == m.teams && e.games == m.games
+        && e.updatedAt == request.time;
+    }
+    function linkedEntry(rankId, m) {
+      return entryMatches(getAfter(/databases/$(database)/documents/rankings/$(rankId)/entries/$(m.id)).data, m);
+    }
+    function linkedEntries(m) {
+      let ids = m.get('rankingIds', []);
+      return ids is list && ids.size() <= 5 && ids.toSet().size() == ids.size()
+        && (ids.size() < 1 || linkedEntry(ids[0], m))
+        && (ids.size() < 2 || linkedEntry(ids[1], m))
+        && (ids.size() < 3 || linkedEntry(ids[2], m))
+        && (ids.size() < 4 || linkedEntry(ids[3], m))
+        && (ids.size() < 5 || linkedEntry(ids[4], m));
+    }
+    function removedEntry(rankId, m) {
+      return rankId in m.get('rankingIds', []) || !existsAfter(/databases/$(database)/documents/rankings/$(rankId)/entries/$(m.id));
+    }
+    function removedEntries(m) {
+      let ids = resource.data.get('rankingIds', []);
+      return (ids.size() < 1 || removedEntry(ids[0], m))
+        && (ids.size() < 2 || removedEntry(ids[1], m))
+        && (ids.size() < 3 || removedEntry(ids[2], m))
+        && (ids.size() < 4 || removedEntry(ids[3], m))
+        && (ids.size() < 5 || removedEntry(ids[4], m));
+    }
     function validMatch() {
       let m = request.resource.data;
       return m.keys().hasAll(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails'])
-        && m.keys().hasOnly(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails', 'currency'])
+        && m.keys().hasOnly(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails', 'currency', 'rankingIds'])
         && m.id is string && m.id.size() > 0
         && m.name is string && m.name.size() > 0 && m.name.size() <= 100
         && m.date is string && m.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
@@ -21,7 +60,7 @@ service cloud.firestore {
         && m.sharedEmails is list && m.sharedEmails.size() <= 50
         && (m.visibility == 'shared' ? m.sharedEmails.size() > 0 : m.sharedEmails.size() == 0)
         && m.ownerName is string
-        && m.updatedAt == request.time;
+        && m.updatedAt == request.time && linkedEntries(m);
     }
     match /matches/{matchId} {
       allow read: if signedIn() && (
@@ -36,8 +75,55 @@ service cloud.firestore {
       allow update: if signedIn() && resource.data.ownerId == request.auth.uid
         && validMatch()
         && request.resource.data.id == matchId
-        && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+        && request.resource.data.createdAt == resource.data.createdAt && removedEntries(request.resource.data);
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid && removedEntries({'id': matchId, 'rankingIds': []});
+    }
+    match /rankings/{rankId} {
+      function validRanking() {
+        let r = request.resource.data;
+        return r.keys().hasAll(['id','name','startDate','endDate','currency','visibility','contributorEmails','ownerId','ownerName','createdAt','updatedAt'])
+          && r.keys().hasOnly(['id','name','startDate','endDate','currency','visibility','contributorEmails','ownerId','ownerName','createdAt','updatedAt'])
+          && r.id == rankId && r.ownerId == request.auth.uid && r.ownerName is string
+          && r.name is string && r.name.size() > 0 && r.name.size() <= 100
+          && r.startDate is string && r.endDate is string
+          && r.startDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') && r.endDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && r.startDate <= r.endDate && r.currency in ['ARS','USD','UYU'] && r.visibility in ['public','private']
+          && r.contributorEmails is list && r.contributorEmails.size() <= 50 && r.updatedAt == request.time;
+      }
+      allow read: if signedIn() && (resource.data.ownerId == request.auth.uid || resource.data.visibility == 'public'
+        || (email() != '' && (email() in resource.data.contributorEmails || exists(/databases/$(database)/documents/rankingAccess/$(email())/rankings/$(rankId)))));
+      allow create: if signedIn() && validRanking() && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid && validRanking()
+        && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.currency == resource.data.currency;
+      match /entries/{matchId} {
+        function validEntry() {
+          let e = request.resource.data;
+          let m = getAfter(/databases/$(database)/documents/matches/$(matchId)).data;
+          let r = get(/databases/$(database)/documents/rankings/$(rankId)).data;
+          return e.keys().hasOnly(['id','ownerId','ownerName','name','date','currency','players','teams','games','updatedAt'])
+            && m.ownerId == request.auth.uid && rankId in m.get('rankingIds', []) && entryMatches(e, m)
+            && e.date >= r.startDate && e.date <= r.endDate && e.currency == r.currency && mayContribute(rankId);
+        }
+        allow read: if signedIn() && (mayReadRanking(rankId) || resource.data.ownerId == request.auth.uid);
+        allow create: if signedIn() && validEntry();
+        allow update: if signedIn() && resource.data.ownerId == request.auth.uid && validEntry();
+        allow delete: if signedIn() && resource.data.ownerId == request.auth.uid
+          && (!existsAfter(/databases/$(database)/documents/matches/$(matchId)) || !(rankId in getAfter(/databases/$(database)/documents/matches/$(matchId)).data.get('rankingIds', [])));
+      }
+      match /players/{playerEmail} {
+        allow read: if signedIn() && mayReadRanking(rankId);
+        allow create, update: if signedIn() && mayContribute(rankId)
+          && request.resource.data.keys().hasOnly(['email','name']) && request.resource.data.email == playerEmail
+          && playerEmail == playerEmail.lower() && playerEmail.matches('^[^/@ ]+@[^/@ ]+[.][^/@ ]+$')
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80;
+      }
+    }
+    match /rankingAccess/{playerEmail}/rankings/{rankId} {
+      allow read: if signedIn() && email() == playerEmail;
+      allow create, update: if signedIn() && mayContribute(rankId)
+        && request.resource.data.keys().hasOnly(['rankingId','email'])
+        && request.resource.data.rankingId == rankId && request.resource.data.email == playerEmail
+        && getAfter(/databases/$(database)/documents/rankings/$(rankId)/players/$(playerEmail)).data.email == playerEmail;
     }
   }
 }

@@ -114,3 +114,18 @@ La paleta usa azul marino #191b45, celeste, blanco y dorado #e5aa3e, inspirada e
 ## Monto inicial del escalonado
 
 Medal, Fourball y laguneada admiten `startAmount` independiente de `step`: inicio 2000 e incremento 1000 producen aportes 2000, 3000, 4000 por jugador. Medal y Fourball no cuentan puestos premiados o exentos; los empates promedian los importes ocupados. Inicio 0 es válido. Vacío mantiene el comportamiento anterior (inicio igual al incremento; en laguneada conserva la numeración histórica si empatan equipos ganadores). Con inicio explícito en laguneada se cuenta desde el primer equipo que paga. No hay conversión de moneda ni cambios automáticos en partidas guardadas.
+
+## Rankings acumulados
+
+La sección Rankings permite crear rankings públicos o privados con nombre, moneda y período inclusivo. Se acumula el saldo neto total de todas las apuestas, incluidas las penalidades NPT para la mesa. Una partida puede asociarse a hasta cinco rankings y solo una vez a cada uno. Debe estar dentro del período y usar la misma moneda. Los resultados incompletos quedan pendientes y no suman hasta poder liquidarlos; los cambios del período pueden excluir partidas anteriores. La moneda del ranking queda fija desde su creación.
+
+- Creador: administra nombre, período, privacidad e invitados, y agrega partidas propias.
+- Público: cualquier usuario registrado puede verlo y agregar partidas propias.
+- Privado: solo creador e invitados pueden agregar partidas propias. Los jugadores registrados en el ranking tienen acceso de lectura al entrar con el mismo correo verificado de Google.
+- Participantes: se identifican por correo normalizado, no por nombre ni por el ID local del jugador de cada partida. Para vincular una partida se requiere correo válido y único de cada jugador. Sus datos aparecen en el ranking y se ofrecen como opciones para las próximas partidas.
+
+Se muestran Todos, Creados por mí y Donde participo, además de tablas con correos, saldo, cantidad de partidas y desglose. El ranking se comparte copiando su URL, que respeta los permisos. Los correos y resultados asociados son visibles para quienes acceden al ranking. Registrar un jugador no le concede permiso para agregar partidas privadas: debe estar invitado por el creador. El registro de participantes se conserva al quitar una partida, para reutilizar el plantel y conservar el acceso histórico; sin resultados contabilizados aparecen sin posición ni saldo acumulado.
+
+Persistencia: `rankings/{id}`, subcolecciones `entries` y `players`, y `rankingAccess/{email}/rankings/{id}` para descubrir participaciones al entrar. Cada partida y sus snapshots en rankings se guardan en un mismo lote; las reglas exigen sincronización y verifican autor, fecha, moneda y coincidencia de resultados. Quitar una asociación elimina su snapshot en el mismo lote. Los participantes se registran después en lotes pequeños; si falla esa etapa, la app informa que la partida quedó guardada y pide volver a guardar para completar el registro. No requiere Cloud Functions ni índices compuestos. Los saldos se calculan al abrir el ranking con el mismo motor de apuestas. Solo el autor de una partida puede agregarla, modificarla o quitarla de un ranking.
+
+La demo ofrece el mismo flujo de rankings, exclusivamente local al navegador. No publica datos ni inicia sesión. Límites de listado inicial: hasta 100 rankings por categoría de acceso. Las partidas existentes no se asocian automáticamente a ningún ranking.
