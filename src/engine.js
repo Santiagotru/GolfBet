@@ -1,3 +1,4 @@
+import {CURRENCIES} from './money.js';
 export class ValidationError extends Error {}
 const fail = message => { throw new ValidationError(message); };
 const money = value => {
@@ -24,6 +25,7 @@ export function parseScore(value) {
 }
 export const medalGroups = players => groups(players,p=>p.npt?Infinity:parseScore(p.net));
 export function calculate(match) {
+  if(!CURRENCIES.includes(match.currency??'ARS'))fail('Elegí una moneda válida: ARS, USD o UYU.');
   const players = match.players || [];
   if (players.length < 2) fail('Agregá al menos dos jugadores.');
   const ids = players.map(p => p.id);
@@ -118,6 +120,27 @@ export function calculate(match) {
     if(!Number.isInteger(hole)||hole<1||hole>18||holes.has(hole)) fail('Los hoyos de Approach deben ser distintos y estar entre 1 y 18.');
     holes.add(hole); fixed(`Approach · hoyo ${hole}`,a.amount,a.winners);
   }
+  let fourball=null;
+  if(games.fourball?.enabled){
+    const c=games.fourball,teams=c.teams||[];
+    if(teams.length<2 || new Set(teams.map(t=>t.id)).size!==teams.length)fail('Fourball necesita al menos dos parejas distintas.');
+    if(players.some(p=>!teams.some(t=>t.id===p.fourballTeam)) || teams.some(t=>players.filter(p=>p.fourballTeam===t.id).length!==2))fail('Asigná exactamente dos jugadores a cada pareja de Fourball y una pareja a cada jugador.');
+    if(teams.some(t=>!t.npt&&!Number.isFinite(parseScore(t.score))))fail('Completá el score neto de todas las parejas de Fourball.');
+    const multiplier=2;
+    const teamPlayers=teams.map(t=>({id:t.id,name:t.name,net:t.score,npt:!!t.npt}));
+    const base=calculate({currency:match.currency,players:teamPlayers,games:{medal:c}});
+    for(let i=0;i<base.results[0].entries.length;i++){
+      const charges=new Map(),prizes=new Map();
+      for(const team of base.results){
+        const members=players.filter(p=>p.fourballTeam===team.id).map(p=>p.id).sort();
+        split(team.entries[i].paid*multiplier,members).forEach((n,id)=>charges.set(id,n));
+        split(team.entries[i].won*multiplier,members).forEach((n,id)=>prizes.set(id,n));
+      }
+      const retained=[...charges.values()].reduce((s,n)=>s+n,0)-[...prizes.values()].reduce((s,n)=>s+n,0);
+      record(i===0?'Fourball · parejas':'Fourball · penalidad NPT para la mesa',charges,prizes,retained);
+    }
+    fourball=medalGroups(teamPlayers).map(group=>group.map(t=>({...t,members:players.filter(p=>p.fourballTeam===t.id).map(p=>p.id)})));
+  }
   let skins=null;
   if(games.skins?.enabled){
     const c=games.skins, amount=money(c.amount);
@@ -160,5 +183,5 @@ export function calculate(match) {
     debtors[i].left-=n;creditors[j].left-=n;
     if(!debtors[i].left)i++;if(!creditors[j].left)j++;
   }
-  return {results,pots,transfers,tableTotal,skins};
+  return {results,pots,transfers,tableTotal,skins,fourball};
 }

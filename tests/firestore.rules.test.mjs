@@ -42,3 +42,5 @@ test('Guardar no permite sobrescribir una partida privada ajena',async()=>{
  const attack={...data(),visibility:'private'};delete attack.ownerId;
  await assertFails(saveMatchToStore(other,attack,{uid:'other',displayName:'Otro'}));
 });
+
+test('Permite guardar las tres monedas y documentos anteriores sin moneda',async()=>{const db=await create();for(const currency of ['ARS','USD','UYU'])await assertSucceeds(updateDoc(doc(db,'matches','match1'),{currency,updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(db,'matches','match1'),{currency:'EUR',updatedAt:serverTimestamp()}));});

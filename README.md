@@ -1,6 +1,6 @@
 # GolfBet
 
-Web responsive para organizar partidas de golf de 18 hoyos y liquidar apuestas en pesos argentinos. Firebase Authentication permite entrar con Google; Firestore permite partidas privadas, compartidas por correo de Google o públicas para usuarios registrados. Las nuevas son privadas por defecto. Solo el creador puede editarlas. No procesa pagos.
+Web responsive para organizar partidas de golf de 18 hoyos y liquidar apuestas en ARS, USD o UYU. Firebase Authentication permite entrar con Google; Firestore permite partidas privadas, compartidas por correo de Google o públicas para usuarios registrados. Las nuevas son privadas por defecto. Solo el creador puede editarlas. No procesa pagos.
 
 ## Desarrollo
 
@@ -47,11 +47,11 @@ Este mecanismo está deprecado por Firebase, aunque la versión instalada aún l
 
 El borrador del entorno incluye dominios de Firebase y `www.googleapis.com` para el intercambio OAuth. Revisar y guardar esos cambios y publicar el entorno cuando lo solicite la interfaz. Esto prepara Codex; **no publica la web**. Verificar primero acceso de lectura con Firebase CLI y luego ejecutar el despliegue autorizado. No activar logs de depuración con credenciales. Si el home no es escribible, usar `XDG_CONFIG_HOME=/tmp/golfbet-firebase-config XDG_CACHE_HOME=/tmp/golfbet-firebase-cache` al invocar la CLI.
 
-Estado de validación: 17 pruebas de cálculo/exportación y 10 pruebas de navegador pasaron, y la compilación de producción pasó. También pasaron las 8 pruebas de permisos en Firestore Emulator. Las reglas se desplegaron correctamente en `golfbet-34a06`. Hosting se desplegó correctamente en https://golfbet-34a06.web.app. Se descargaron los archivos publicados mediante curl con verificación TLS y se ejecutaron en Chromium con interceptación de esas respuestas: la demo liquidó cuatro jugadores sin errores JavaScript. La navegación directa de Chromium fue bloqueada por la confianza del certificado del proxy del entorno; no se desactivó TLS. El inicio de sesión Google y el guardado de una partida real siguen pendientes de validación con el usuario. El usuario confirmó haber activado Google y creado Firestore, pero el flujo real de autenticación y persistencia todavía debe verificarse. La auditoría npm detecta avisos en la dependencia Node `@grpc/grpc-js` de Firebase, sin corrección publicada en esa línea; la aplicación desplegada usa el SDK del navegador y no un servidor gRPC.
+Estado de validación: 45 pruebas de cálculo/exportación y 20 pruebas de navegador pasaron, y la compilación de producción pasó. También pasaron las 11 pruebas de permisos en Firestore Emulator. Las reglas se desplegaron correctamente en `golfbet-34a06`. Hosting se desplegó correctamente en https://golfbet-34a06.web.app. Se descargaron los archivos publicados mediante curl con verificación TLS y se ejecutaron en Chromium con interceptación de esas respuestas: la demo liquidó cuatro jugadores sin errores JavaScript. La navegación directa de Chromium fue bloqueada por la confianza del certificado del proxy del entorno; no se desactivó TLS. El inicio de sesión Google y el guardado de una partida real siguen pendientes de validación con el usuario. El usuario confirmó haber activado Google y creado Firestore, pero el flujo real de autenticación y persistencia todavía debe verificarse. La auditoría npm detecta avisos en la dependencia Node `@grpc/grpc-js` de Firebase, sin corrección publicada en esa línea; la aplicación desplegada usa el SDK del navegador y no un servidor gRPC.
 
 ## Reglas de cálculo
 
-Todos los cálculos usan centavos enteros. El total ganado coincide con el total aportado, y la suma de saldos es cero. Los centavos indivisibles se asignan de forma determinista por identificador.
+Todos los cálculos usan centavos enteros de la moneda elegida por partida (ARS por defecto, USD o UYU). Cambiar la moneda no convierte los importes. El total ganado coincide con el total aportado, y la suma de saldos es cero. Los centavos indivisibles se asignan de forma determinista por identificador.
 
 - **Ida y vuelta:** todos aportan un monto fijo por tramo. Los ganadores comparten el pozo; su saldo descuenta su propio aporte.
 - **Medal:** gana el score neto más bajo. Aporte fijo o escalonado. Con incremento $1.000, el primer puesto que paga aporta $1.000, el siguiente que paga $2.000 y así sucesivamente. Los premiados o exentos no consumen escalones: si primero, segundo y tercero reciben premio, cuarto paga $1.000 y quinto $2.000. Segundo y tercero pueden pagar, estar exentos o recibir un porcentaje; el primer puesto recibe el porcentaje restante. Desde el cuarto todos pagan.
@@ -100,3 +100,13 @@ Activar en las apuestas del día. Configurar el aporte general por jugador y hoy
 Todos los jugadores aportan por hoyo. Con acumulación, el siguiente ganador único cobra el pozo del hoyo más los anteriores empatados. Sin acumulación se devuelve el aporte de cada hoyo empatado. Los pozos aún pendientes al final del recorrido se devuelven por igual a quienes aportaron. Las devoluciones están incluidas en los saldos; no son premios nuevos. NPT de Medal no excluye de Skins. El desglose individual, CSV y mensaje para WhatsApp incluyen Skins, con detalle de hoyos y devoluciones en pantalla y WhatsApp.
 
 Los valores particulares de Skins reemplazan el general solo en ese hoyo. Vacío usa el valor general; 0 significa hoyo sin aporte. La acumulación y las devoluciones suman los importes reales de cada hoyo. La liquidación y el texto de WhatsApp muestran esos valores.
+
+## Fourball, modalidades y moneda
+
+Las nuevas partidas tienen todas las modalidades desactivadas. Primero se seleccionan en Modalidades del día; después se cargan jugadores y equipos y se configuran importes y resultados de las modalidades activas. Las partidas anteriores conservan su configuración.
+
+Fourball necesita al menos dos parejas distintas y exactamente dos jugadores por pareja. Cada jugador tiene una asignación Fourball independiente de su equipo de laguneada. Se carga el score neto de la pareja, con el menor score ganando. Los aportes son **por jugador**. Aporte fijo o escalonado, premios porcentuales por puesto, exenciones, empates y NPT usan las mismas reglas que Medal. El primer puesto que paga inicia el escalonado. Las penalidades NPT van a la mesa por cada integrante. El resultado de la pareja se reparte entre sus dos jugadores, conservando los centavos. La web y WhatsApp muestran score, puesto e integrantes de cada pareja.
+
+La moneda se selecciona en La partida. ARS/USD/UYU se muestran explícitamente en saldos, pozos, CSV y WhatsApp para evitar ambigüedad del símbolo $. No se convierten importes entre monedas. Documentos anteriores sin moneda se interpretan como ARS; las reglas de Firestore aceptan los tres códigos y conservan compatibilidad con esos documentos.
+
+La paleta usa azul marino #191b45, celeste, blanco y dorado #e5aa3e, inspirada en el flyer proporcionado. No se incorporaron el logo ni la fotografía del club.
