@@ -23,7 +23,7 @@ export function validateRankingMatch(match,rankings){
   if(new Set(emails).size!==emails.length)throw new Error('Dos jugadores de una partida no pueden tener el mismo correo.');
 }
 export function rankingEntry(match,user){
-  return {id:match.id,ownerId:user.uid,ownerName:user.displayName||'Jugador',name:match.name,date:match.date,currency:match.currency??'ARS',players:match.players,teams:match.teams,games:match.games};
+  return {id:match.id,ownerId:match.ownerId||user.uid,ownerName:match.ownerName||user.displayName||'Jugador',name:match.name,date:match.date,currency:match.currency??'ARS',players:match.players,teams:match.teams,games:match.games};
 }
 export function aggregateRanking(ranking,entries,profiles=[]){
   const people=new Map(profiles.map(p=>[playerKey(p),{id:playerKey(p),email:normalizeEmail(p.email),name:p.name,total:0,played:0,history:[]}]));

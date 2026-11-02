@@ -1,6 +1,6 @@
 # GolfBet
 
-Web responsive para organizar partidas de golf de 18 hoyos y liquidar apuestas en ARS, USD o UYU. Firebase Authentication permite entrar con Google; Firestore permite partidas privadas, compartidas por correo de Google o públicas para usuarios registrados. Las nuevas son privadas por defecto. Solo el creador puede editarlas. No procesa pagos.
+Web responsive para organizar partidas de golf de 18 hoyos y liquidar apuestas en ARS, USD o UYU. Firebase Authentication permite entrar con Google; Firestore permite partidas privadas, compartidas por correo de Google o públicas para usuarios registrados. Las nuevas son privadas por defecto. El creador puede designar editores por correo en las partidas compartidas. No procesa pagos.
 
 ## Desarrollo
 
@@ -23,7 +23,7 @@ En la portada, **Probar una partida de ejemplo** funciona sin Google. Es un modo
 2. Configuración del proyecto → General → Tus apps → registrar una app web. Copiar `apiKey`, `authDomain`, `projectId` y `appId` a las variables de `.env.local` correspondientes. No necesita Analytics ni Storage.
 3. Compilación / Build → Authentication → Comenzar → Método de acceso / Sign-in method → Google → Activar. Seleccionar un correo de soporte y guardar.
 4. Compilación / Build → Firestore Database → Crear base de datos. Elegir edición Standard, ID `(default)`, región apropiada (por ejemplo São Paulo si está disponible) y modo producción. La región no se puede cambiar después.
-5. Firestore Database → Reglas: reemplazar el contenido con `firestore.rules` y publicar, o desplegarlo con la CLI junto a Hosting. Las reglas incluidas permiten lectura según privacidad (creador, correos verificados autorizados o todos los registrados para públicas), creación con autor válido y edición solo por el creador.
+5. Firestore Database → Reglas: reemplazar el contenido con `firestore.rules` y publicar, o desplegarlo con la CLI junto a Hosting. Las reglas incluidas permiten lectura según privacidad (creador, correos verificados autorizados o todos los registrados para públicas), creación con autor válido y edición por el creador o editores designados, sin que estos últimos puedan cambiar los permisos.
 6. Authentication → Configuración → Dominios autorizados: comprobar `golfbet-34a06.web.app` y `golfbet-34a06.firebaseapp.com`. Para pruebas locales agregar `localhost` y, si se usa, `127.0.0.1`. Agregar también cualquier dominio propio.
 
 ## Publicar
@@ -81,7 +81,7 @@ Listado de hasta 100 partidas por categoría (propias, públicas, compartidas), 
 
 ## Privacidad y compatibilidad
 
-Seleccionar el acceso en La partida y guardar. Compartidas admite hasta 50 correos separados por comas, normalizados a minúsculas; los invitados deben iniciar sesión con esas cuentas de Google verificadas. Cambiar a privada revoca todos los invitados. Solo el creador puede modificar la configuración o resultados. El texto para WhatsApp exporta los resultados que el usuario elige copiar y no contiene enlaces a partidas privadas.
+Seleccionar el acceso en La partida y guardar. Compartidas admite hasta 50 correos separados por comas, normalizados a minúsculas; los invitados deben iniciar sesión con esas cuentas de Google verificadas. Cambiar a privada revoca todos los invitados. Cada correo compartido tiene rol Lector o Editor. Los editores con correo de Google verificado pueden modificar datos y resultados; el creador conserva la administración de accesos, moneda, asociaciones con rankings y eliminación. Revocar el rol impide guardar incluso desde una pestaña abierta. La autoría original se conserva. El texto para WhatsApp exporta los resultados que el usuario elige copiar y no contiene enlaces a partidas privadas.
 
 La partida existente antes de incorporar privacidad se migró de forma aditiva a `visibility: public` y `sharedEmails: []`, conservando su acceso previo y sus resultados. Su creador puede hacerla privada desde la interfaz. Las consultas están filtradas por permisos antes de traer documentos, y no necesitan índices compuestos.
 
@@ -129,3 +129,12 @@ Se muestran Todos, Creados por mí y Donde participo, además de tablas con corr
 Persistencia: `rankings/{id}`, subcolecciones `entries` y `players`, y `rankingAccess/{email}/rankings/{id}` para descubrir participaciones al entrar. Cada partida y sus snapshots en rankings se guardan en un mismo lote; las reglas exigen sincronización y verifican autor, fecha, moneda y coincidencia de resultados. Quitar una asociación elimina su snapshot en el mismo lote. Los participantes se registran después en lotes pequeños; si falla esa etapa, la app informa que la partida quedó guardada y pide volver a guardar para completar el registro. No requiere Cloud Functions ni índices compuestos. Los saldos se calculan al abrir el ranking con el mismo motor de apuestas. Solo el autor de una partida puede agregarla, modificarla o quitarla de un ranking.
 
 La demo ofrece el mismo flujo de rankings, exclusivamente local al navegador. No publica datos ni inicia sesión. Límites de listado inicial: hasta 100 rankings por categoría de acceso. Las partidas existentes no se asocian automáticamente a ningún ranking.
+
+
+### Importes enteros y participación por modalidad
+
+Todos los importes se muestran y liquidan sin decimales: ARS en múltiplos de 100 y USD/UYU en unidades enteras. Los montos configurados se redondean al más cercano (mitades hacia arriba). Los repartos se hacen en esas unidades, distribuyendo el sobrante con un orden estable por ID para conservar exactamente el pozo. Empatados pueden diferir en una unidad cuando el pozo no es divisible. El desglose, las transferencias, los rankings, WhatsApp y CSV usan la misma liquidación; no se convierte entre monedas. Las partidas históricas se recalculan con esta regla al abrirlas.
+
+Un jugador sin equipo de Laguneada o sin pareja de Fourball no aporta ni recibe premios o penalidades de esa modalidad. Sigue participando en las otras apuestas habilitadas, incluido Medal. Se mantienen al menos dos equipos, sin equipos vacíos; Fourball exige exactamente dos integrantes por pareja participante. Las dos asignaciones son independientes.
+
+Los editores guardan la partida y sus snapshots en los rankings existentes en el mismo lote, conservando creador y fecha de creación. El permiso de edición de una partida no otorga acceso a los demás resultados de un ranking privado.

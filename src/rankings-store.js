@@ -25,17 +25,20 @@ export async function rankingRosterFromStore(db,ids){
   const snapshots=await Promise.all(ids.map(id=>getDocs(collection(db,'rankings',id,'players'))));const people=new Map();snapshots.forEach(s=>s.docs.forEach(d=>people.set(d.id,{...d.data(),participantId:d.id})));return [...people.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 export async function persistMatchWithRankings(db,match,user,previous){
-  const ids=[...new Set(match.rankingIds||[])],ranks=await Promise.all(ids.map(id=>loadRankingFromStore(db,id)));
-  validateRankingMatch({...match,rankingIds:ids},ranks);
-  if(ranks.some(r=>!canContributeRanking(r,user)))throw new Error('No tenés permiso para agregar partidas a uno de los rankings seleccionados. Quitá esa asociación o pedí acceso al creador.');
+  const ids=[...new Set(match.rankingIds||[])],editor=previous&&previous.ownerId!==user.uid;
+  if(editor && JSON.stringify(ids)!==JSON.stringify(previous.rankingIds||[]))throw new Error('Solo el creador puede cambiar los rankings de la partida.');
+  const ranks=editor?[]:await Promise.all(ids.map(id=>loadRankingFromStore(db,id)));
+  if(!editor)validateRankingMatch({...match,rankingIds:ids},ranks);
+  if(!editor&&ranks.some(r=>!canContributeRanking(r,user)))throw new Error('No tenés permiso para agregar partidas a uno de los rankings seleccionados. Quitá esa asociación o pedí acceso al creador.');
   match.players.forEach(p=>{p.participantId ||= playerKey(p);});
   const {createdAt,updatedAt,...fields}=match;
-  const data={...fields,rankingIds:ids,ownerId:user.uid,ownerName:user.displayName||'Jugador',updatedAt:serverTimestamp()};
+  const data={...fields,rankingIds:ids,ownerId:previous?.ownerId||user.uid,ownerName:previous?.ownerName||user.displayName||'Jugador',updatedAt:serverTimestamp()};
   const batch=writeBatch(db),ref=doc(db,'matches',match.id);
   if(match.ownerId)batch.update(ref,data);else batch.set(ref,{...data,createdAt:serverTimestamp()});
   for(const id of ids)batch.set(doc(db,'rankings',id,'entries',match.id),{...rankingEntry(data,user),updatedAt:serverTimestamp()});
   for(const id of previous?.rankingIds||[])if(!ids.includes(id))batch.delete(doc(db,'rankings',id,'entries',match.id));
   await batch.commit();
+  if(editor)return {};
   // El perfil conserva su identidad aunque el correo cambie o esté vacío.
   try{for(const id of ids)for(const player of match.players){
     const key=playerKey(player),ref=doc(db,'rankings',id,'players',key),existing=await getDoc(ref);

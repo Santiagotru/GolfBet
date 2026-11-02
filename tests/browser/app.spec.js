@@ -6,7 +6,7 @@ test('Demo calcula, desglosa, exporta y guarda una partida',async({page})=>{
   await page.getByRole('button',{name:'Ver liquidación'}).click();
   await expect(page.locator('.result-row')).toHaveCount(4);
   const first=page.locator('.result-row').first();
-  await expect(first).toContainText('Santiago');await expect(first).toContainText('11.000,00');
+  await expect(first).toContainText('Santiago');await expect(first).toContainText('11.000');
   await first.locator('summary').click();await expect(first.locator('tbody tr')).toHaveCount(5);
   await expect(first.locator('tbody')).toContainText('Medal');
   await expect(page.locator('.transfer')).toHaveCount(3);
@@ -26,7 +26,7 @@ test('Configuración cambia cálculos y evita resultados incompletos',async({pag
   await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();
   await page.locator('input[data-path="games.medal.step"]').fill('2000');
   await page.getByRole('button',{name:'Ver liquidación'}).click();
-  await expect(page.locator('.result-row').first()).toContainText('17.000,00');
+  await expect(page.locator('.result-row').first()).toContainText('17.000');
   await page.getByRole('button',{name:'Ver configuración'}).click();
   await page.locator('input[data-path="players.0.net"]').fill('');
   await page.getByRole('button',{name:'Ver liquidación'}).click();
@@ -69,17 +69,17 @@ test('Fourball completo liquida por jugador y conserva selección al guardar',as
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
  await page.screenshot({path:testInfo.outputPath('fourball-config.png'),fullPage:true});
  await page.getByRole('button',{name:'Guardar partida'}).click();await expect(page.getByRole('status')).toContainText('guardada');
- await page.getByRole('button',{name:'Ver liquidación'}).click();await expect(page.getByRole('heading',{name:'Resultados de Fourball'})).toBeVisible();await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('USD');await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('1.000,00');
+ await page.getByRole('button',{name:'Ver liquidación'}).click();await expect(page.getByRole('heading',{name:'Resultados de Fourball'})).toBeVisible();await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('USD');await expect(page.locator('.result-row').first().locator('.saldo')).toContainText('1.000');
  await page.getByRole('button',{name:'Todas las partidas'}).click();await page.locator('.match-card').click();await expect(page.locator('select[data-path="currency"]')).toHaveValue('USD');await expect(page.locator('input[data-path="games.fourball.enabled"]')).toBeChecked();
 });
 
-test('Monto inicial del Medal se configura separado del incremento',async({page})=>{await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.locator('input[data-path="games.medal.startAmount"]').fill('2000');await page.getByRole('button',{name:'Ver liquidación'}).click();await page.locator('.result-row').first().locator('summary').click();await expect(page.locator('.result-row').first()).toContainText('14.000,00');});
+test('Monto inicial del Medal se configura separado del incremento',async({page})=>{await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.locator('input[data-path="games.medal.startAmount"]').fill('2000');await page.getByRole('button',{name:'Ver liquidación'}).click();await page.locator('.result-row').first().locator('summary').click();await expect(page.locator('.result-row').first()).toContainText('14.000');});
 
 test('Ranking acumula una partida, muestra mail y ofrece sus jugadores en la próxima',async({page},testInfo)=>{
  await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.getByRole('button',{name:'Rankings',exact:true}).click();await page.getByRole('button',{name:'Crear ranking'}).click();
  await page.locator('input[data-rank-field="name"]').fill('Ranking anual');await page.locator('input[data-rank-field="startDate"]').fill('2026-01-01');await page.locator('input[data-rank-field="endDate"]').fill('2026-12-31');await page.getByRole('button',{name:'Guardar ranking'}).click();await expect(page.getByRole('heading',{name:'Ranking anual',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.getByRole('button',{name:'Crear partida'}).click();await page.locator('input[data-path="name"]').fill('Medal de octubre');await page.locator('input[data-path="date"]').fill('2026-10-15');await page.locator('input[data-ranking-id]').check();await page.locator('input[data-path="players.0.name"]').fill('Ana');await page.locator('input[data-path="players.0.email"]').fill('demo@example.com');await page.locator('input[data-path="players.1.name"]').fill('Luis');await page.locator('input[data-path="players.1.email"]').fill('luis@gmail.com');await page.locator('input[data-path="games.medal.enabled"]').check();await page.locator('input[data-path="players.0.net"]').fill('69');await page.locator('input[data-path="players.1.net"]').fill('72');await page.getByRole('button',{name:'Guardar partida'}).click();await expect(page.getByRole('status')).toContainText('guardada');await page.getByRole('button',{name:'Guardar partida'}).click();
- await page.getByRole('button',{name:'Rankings',exact:true}).click();await page.getByRole('button',{name:'Donde participo',exact:true}).click();await page.locator('.match-card').click();await expect(page.locator('.ranking-table')).toContainText('demo@example.com');await expect(page.locator('.ranking-table')).toContainText('1.000,00');await expect(page.getByText('1 partida contabilizada',{exact:false})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);await page.screenshot({path:testInfo.outputPath('ranking.png'),fullPage:true});
+ await page.getByRole('button',{name:'Rankings',exact:true}).click();await page.getByRole('button',{name:'Donde participo',exact:true}).click();await page.locator('.match-card').click();await expect(page.locator('.ranking-table')).toContainText('demo@example.com');await expect(page.locator('.ranking-table')).toContainText('1.000');await expect(page.getByText('1 partida contabilizada',{exact:false})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);await page.screenshot({path:testInfo.outputPath('ranking.png'),fullPage:true});
  await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.getByRole('button',{name:'Crear partida'}).click();await page.locator('input[data-ranking-id]').check();await page.locator('select[data-roster-player="0"]').selectOption('demo@example.com');await expect(page.locator('input[data-path="players.0.name"]')).toHaveValue('Ana');await expect(page.locator('input[data-path="players.0.email"]')).toHaveValue('demo@example.com');
 });
 
@@ -92,4 +92,26 @@ test('Ranking admite jugadores sin correo y permite agregarlo después conservan
  const detail=page.locator('.ranking-player-detail').filter({has:page.locator('summary',{hasText:'Ana'})});await detail.locator('summary').click();await detail.locator('[data-player-email]').fill('demo@example.com');await detail.getByRole('button',{name:'Guardar correo'}).click();await expect(page.locator('.ranking-table')).toContainText('demo@example.com');
  await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.locator('.match-card').filter({hasText:'Primera sin mail'}).click();await expect(page.locator('[data-path="players.0.email"]')).toHaveValue('demo@example.com');
  await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.getByRole('button',{name:'Crear partida'}).click();await page.locator('[data-ranking-id]').check();await page.locator('[data-roster-player="0"]').selectOption(playerId);await expect(page.locator('[data-path="players.0.name"]')).toHaveValue('Ana');await expect(page.locator('[data-path="players.0.email"]')).toHaveValue('demo@example.com');
+});
+
+test('Compartir permite designar y revocar editor por correo',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.locator('[data-path="visibility"]').selectOption('shared');await page.locator('[data-share-emails]').fill('editor@example.com, lector@example.com');await page.locator('[data-share-emails]').blur();
+ await expect(page.locator('[data-share-role="editor@example.com"]')).toHaveValue('reader');await page.locator('[data-share-role="editor@example.com"]').selectOption('editor');await page.getByRole('button',{name:'Guardar partida'}).click();await expect(page.getByRole('status')).toContainText('guardada');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('golfbet-demo-matches'))[0].editorEmails)).toEqual(['editor@example.com']);expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+ await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.locator('.match-card').click();await expect(page.locator('[data-share-role="editor@example.com"]')).toHaveValue('editor');await expect(page.locator('[data-share-role="lector@example.com"]')).toHaveValue('reader');
+ await page.locator('[data-share-emails]').fill('lector@example.com');await page.getByRole('button',{name:'Guardar partida'}).click();await expect(page.locator('[data-share-role="editor@example.com"]')).toHaveCount(0);expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('golfbet-demo-matches'))[0].editorEmails)).toEqual([]);
+});
+
+test('Jugador sin equipo ni pareja juega Medal y queda fuera de Laguneada/Fourball',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();await page.locator('[data-path="games.fourball.enabled"]').check();await page.getByRole('button',{name:'Agregar pareja'}).click();await page.getByRole('button',{name:'Agregar pareja'}).click();await page.locator('[data-path="games.fourball.teams.0.score"]').fill('-2');await page.locator('[data-path="games.fourball.teams.1.score"]').fill('0');
+ for(let i=0;i<4;i++)await page.locator(`[data-path="players.${i}.fourballTeam"]`).selectOption({label:i<2?'Pareja 1':'Pareja 2'});
+ await page.getByRole('button',{name:'Agregar jugador',exact:false}).click();await page.locator('[data-path="players.4.name"]').fill('Invitado');await page.locator('[data-path="players.4.net"]').fill('65');await expect(page.locator('[data-path="players.4.team"]')).toHaveValue('');await expect(page.locator('[data-path="players.4.fourballTeam"]')).toHaveValue('');
+ await page.getByRole('button',{name:'Guardar partida'}).click();await page.getByRole('button',{name:'Ver liquidación'}).click();const row=page.locator('.result-row').filter({has:page.locator('summary',{hasText:'Invitado'})});await row.locator('summary').click();await expect(row).toContainText('Medal');await expect(row).not.toContainText('Laguneada');await expect(row).not.toContainText('Fourball');
+ await page.getByRole('button',{name:'Partidas',exact:true}).click();await page.locator('.match-card').click();await expect(page.locator('[data-path="players.4.team"]')).toHaveValue('');await expect(page.locator('[data-path="players.4.fourballTeam"]')).toHaveValue('');
+});
+
+test('Montos y exportación CSV sin decimales, centenas ARS y enteros USD/UYU',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'Probar una partida de ejemplo'}).click();
+ for(const [code,amount,rounded] of [['ARS','149.6','100'],['USD','10.6','11'],['UYU','10.6','11']]){await page.locator('[data-path="currency"]').selectOption(code);const field=page.locator('[data-path="games.ida.amount"]');await field.fill(amount);await field.blur();await expect(field).toHaveValue(rounded);await page.getByRole('button',{name:'Ver liquidación'}).click();await expect(page.locator('.saldo').first()).not.toContainText(/,\d/);await page.getByRole('button',{name:'Ver configuración'}).click();}
+ await page.getByRole('button',{name:'Ver liquidación'}).click();const download=page.waitForEvent('download');await page.getByRole('button',{name:'Descargar desglose CSV'}).click();const stream=await(await download).createReadStream();let content='';for await(const chunk of stream)content+=chunk.toString();expect(content).toContain('Aporte UYU');expect(content).not.toMatch(/\d\.\d\d"/);
 });

@@ -107,3 +107,30 @@ test('Correo opcional, edición central por creador y partidas de otro autor con
  await updateRankingPlayerFromStore(db,'optional','a','nuevo@example.com',owner);await assertFails(getDoc(doc(anaDb,'rankings','optional')));
  await updateRankingPlayerFromStore(db,'optional','a','',owner);assert.equal((await getDoc(doc(db,'rankings','optional','players','a'))).data().email,'');
 });
+
+test('Editor compartido guarda resultados sin cambiar autor, permisos o rankings; lector y revocado no pueden',async()=>{
+ const {saveRankingToStore}=await import('../src/rankings-store.js');
+ const owner={uid:'owner',displayName:'Creador'},db=env.authenticatedContext('owner').firestore();
+ const ids=['editor-r0','editor-r1','editor-r2','editor-r3','editor-r4'];
+ for(const id of ids)await saveRankingToStore(db,{id,name:id,startDate:'2026-01-01',endDate:'2026-12-31',currency:'ARS',visibility:'private',contributorEmails:[]},owner);
+ const m={...data(),id:'editable',visibility:'shared',sharedEmails:['editor@example.com','reader@example.com'],editorEmails:['editor@example.com'],rankingIds:ids,players:[{id:'a',name:'Ana',net:69},{id:'b',name:'Luis',net:72}],games:{medal:{enabled:true,mode:'step',step:1000,policies:[{mode:'prize',percent:100}]}}};delete m.ownerId;
+ await saveMatchToStore(db,m,owner);
+ const editor={uid:'editor',displayName:'Editor',email:'editor@example.com',emailVerified:true},ed=env.authenticatedContext(editor.uid,{email:editor.email,email_verified:true}).firestore();
+ // El permiso sobre la partida no concede lectura del ranking privado.
+ await assertFails(getDoc(doc(ed,'rankings',ids[0])));
+ const loaded=(await getDoc(doc(ed,'matches',m.id))).data();loaded.players[0].net=80;loaded.name='Resultados cargados por editor';
+ assert.equal((await saveMatchToStore(ed,loaded,editor)).warning,undefined);
+ const saved=(await getDoc(doc(db,'matches',m.id))).data();assert.equal(saved.ownerId,'owner');assert.equal(saved.ownerName,'Creador');assert.equal(saved.players[0].net,80);
+ for(const id of ids){const e=(await getDoc(doc(db,'rankings',id,'entries',m.id))).data();assert.equal(e.players[0].net,80);assert.equal(e.ownerId,'owner');assert.equal(e.ownerName,'Creador');}
+ for(const changes of [{ownerId:'editor'},{ownerName:'Editor'},{visibility:'public'},{sharedEmails:['editor@example.com']},{editorEmails:['editor@example.com','reader@example.com']},{currency:'USD'},{rankingIds:[]}])await assertFails(updateDoc(doc(ed,'matches',m.id),{...changes,updatedAt:serverTimestamp()}));
+ await assert.rejects(saveMatchToStore(ed,{...saved,rankingIds:[]},editor),/creador/);
+ const reader={uid:'reader',email:'reader@example.com',emailVerified:true},rd=env.authenticatedContext('reader',{email:reader.email,email_verified:true}).firestore();await assert.rejects(saveMatchToStore(rd,saved,reader),/permiso/);await assertFails(updateDoc(doc(rd,'matches',m.id),{name:'No',updatedAt:serverTimestamp()}));
+ const unverified=env.authenticatedContext('unverified',{email:editor.email,email_verified:false}).firestore();await assertFails(getDoc(doc(unverified,'matches',m.id)));await assertFails(updateDoc(doc(unverified,'matches',m.id),{name:'No',updatedAt:serverTimestamp()}));
+ saved.editorEmails=[];await saveMatchToStore(db,saved,owner);await assert.rejects(saveMatchToStore(ed,loaded,editor),/permiso/);
+});
+
+test('Editor guarda partida sin ranking y no se pueden designar editores fuera de los compartidos',async()=>{
+ const owner={uid:'owner'},db=env.authenticatedContext('owner').firestore(),m={...data(),visibility:'shared',sharedEmails:['editor@example.com'],editorEmails:['editor@example.com']};delete m.ownerId;
+ await saveMatchToStore(db,m,owner);const editor={uid:'editor',email:'editor@example.com',emailVerified:true},ed=env.authenticatedContext('editor',{email:editor.email,email_verified:true}).firestore();const saved=(await getDoc(doc(ed,'matches',m.id))).data();saved.players[0].net=-2;await saveMatchToStore(ed,saved,editor);assert.equal((await getDoc(doc(db,'matches',m.id))).data().ownerId,'owner');
+ await assertFails(updateDoc(doc(db,'matches',m.id),{editorEmails:['other@example.com'],updatedAt:serverTimestamp()}));
+});

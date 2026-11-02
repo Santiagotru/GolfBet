@@ -1,12 +1,12 @@
-import {CURRENCIES} from './money.js';
+import {CURRENCIES,moneyUnit,roundMoney} from './money.js';
 export class ValidationError extends Error {}
 const fail = message => { throw new ValidationError(message); };
-const money = value => {
+const rawMoney = value => {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 1e9) fail('Los montos deben ser números positivos y menores a mil millones.');
-  return Math.round(n * 100);
+  return n * 100;
 };
-function split(total, ids) {
+function splitUnits(total, ids) {
   if (!ids.length) fail('Faltan ganadores para repartir el pozo.');
   const base = Math.floor(total / ids.length), rest = total % ids.length;
   return new Map(ids.map((id, i) => [id, base + (i < rest ? 1 : 0)]));
@@ -26,6 +26,9 @@ export function parseScore(value) {
 export const medalGroups = players => groups(players,p=>p.npt?Infinity:parseScore(p.net));
 export function calculate(match) {
   if(!CURRENCIES.includes(match.currency??'ARS'))fail('Elegí una moneda válida: ARS, USD o UYU.');
+  const unit=moneyUnit(match.currency??'ARS');
+  const money=value=>roundMoney(rawMoney(value),match.currency??'ARS');
+  const split=(total,ids)=>new Map([...splitUnits(Math.round(total/unit),ids)].map(([id,n])=>[id,n*unit]));
   const players = match.players || [];
   if (players.length < 2) fail('Agregá al menos dos jugadores.');
   const ids = players.map(p => p.id);
@@ -33,10 +36,11 @@ export function calculate(match) {
   const rows = new Map(players.map(p => [p.id, {id:p.id, name:p.name, entries:[], total:0}]));
   const pots = [];
   let tableTotal=0;
-  function record(label, charges, prizes, retained=0) {
+  function record(label, charges, prizes, retained=0, participants=ids) {
     const pot = [...charges.values()].reduce((a,b)=>a+b,0);
     if (pot !== [...prizes.values()].reduce((a,b)=>a+b,0)+retained) fail(`El reparto de ${label} no suma el pozo completo.`);
     for (const p of players) {
+      if(!participants.includes(p.id))continue;
       const paid = charges.get(p.id) || 0, won = prizes.get(p.id) || 0;
       rows.get(p.id).entries.push({label, paid, won, net:won-paid});
       rows.get(p.id).total += won-paid;
@@ -73,7 +77,7 @@ export function calculate(match) {
         });
         charge = c.tieMode==='same' ? slotCharges[0] : slotCharges.reduce((a,b)=>a+b,0)/tied.length;
       }
-      // Redondeo compartido a centavos: la suma conserva el aporte del grupo.
+      // Repartir unidades enteras conserva el aporte del grupo incluso en empates.
       const shared=split(Math.round(charge*tied.length),tied.map(p=>p.id));
       tied.forEach(p=>{charges.set(p.id,shared.get(p.id)); weights.set(p.id,prizePercent/tied.length);});
       position+=tied.length;
@@ -83,10 +87,10 @@ export function calculate(match) {
     function award(label, charges){
       const pot=[...charges.values()].reduce((a,b)=>a+b,0);
       const recipients=players.filter(p=>weights.get(p.id)>0).map(p=>({id:p.id,raw:pot*weights.get(p.id)/100}));
-      const prizes=new Map(recipients.map(p=>[p.id,Math.floor(p.raw)]));
-      const cents=pot-[...prizes.values()].reduce((a,b)=>a+b,0);
-      recipients.sort((a,b)=>(b.raw-Math.floor(b.raw))-(a.raw-Math.floor(a.raw)) || a.id.localeCompare(b.id));
-      for(let i=0;i<cents;i++) prizes.set(recipients[i].id,prizes.get(recipients[i].id)+1);
+      const prizes=new Map(recipients.map(p=>[p.id,Math.floor(p.raw/unit)*unit]));
+      const remainder=pot-[...prizes.values()].reduce((a,b)=>a+b,0);
+      recipients.sort((a,b)=>(b.raw/unit-Math.floor(b.raw/unit))-(a.raw/unit-Math.floor(a.raw/unit)) || a.id.localeCompare(b.id));
+      for(let i=0;i<remainder/unit;i++) prizes.set(recipients[i].id,prizes.get(recipients[i].id)+unit);
       record(label,charges,prizes);
     }
     award('Medal · neto',charges);
@@ -97,7 +101,7 @@ export function calculate(match) {
   if (games.laguneada?.enabled) {
     const c=games.laguneada, teams=match.teams || [];
     if (teams.length<2 || new Set(teams.map(t=>t.id)).size!==teams.length) fail('Laguneada necesita al menos dos equipos distintos.');
-    if (players.some(p=>!teams.some(t=>t.id===p.team)) || teams.some(t=>!players.some(p=>p.team===t.id))) fail('Asigná cada jugador a un equipo y evitá equipos vacíos.');
+    if (players.some(p=>p.team&&!teams.some(t=>t.id===p.team)) || teams.some(t=>!players.some(p=>p.team===t.id))) fail('Revisá los equipos de Laguneada: evitá equipos vacíos o inexistentes. Los jugadores sin equipo no participan.');
     if (teams.some(t=>!Number.isFinite(parseScore(t.score)))) fail('Completá los scores de todos los equipos.');
     const ranked=groups(teams,t=>parseScore(t.score)), charges=new Map();
     let position=0,payingPosition=0;
@@ -105,7 +109,7 @@ export function calculate(match) {
       const multiplier=c.tieMode==='same'?position:position+(tied.length-1)/2;
       const customStart=c.startAmount!=null && c.startAmount!=='';
       const payerIndex=payingPosition+(c.tieMode==='same'?0:(tied.length-1)/2);
-      const amount=c.mode==='fixed'?money(c.amount):(index===0?0:customStart?Math.round(money(c.startAmount)+money(c.step)*payerIndex):Math.round(money(c.step)*multiplier));
+      const amount=c.mode==='fixed'?money(c.amount):roundMoney(index===0?0:customStart?money(c.startAmount)+money(c.step)*payerIndex:money(c.step)*multiplier,match.currency??'ARS');
       if(index>0)payingPosition+=tied.length;
       players.filter(p=>tied.some(t=>t.id===p.team)).forEach(p=>charges.set(p.id,amount));
       position+=tied.length;
@@ -115,7 +119,7 @@ export function calculate(match) {
     const pot=[...charges.values()].reduce((a,b)=>a+b,0), prizes=new Map();
     const teamPrizes=split(pot,ranked[0].map(t=>t.id));
     ranked[0].forEach(t=>split(teamPrizes.get(t.id),winnerIds.filter(id=>players.find(p=>p.id===id).team===t.id)).forEach((n,id)=>prizes.set(id,n)));
-    record('Laguneada · por jugador',charges,prizes);
+    record('Laguneada · por jugador',charges,prizes,0,[...charges.keys()]);
   }
   const holes=new Set();
   for (const a of games.approaches || []) if(a.enabled) {
@@ -127,7 +131,7 @@ export function calculate(match) {
   if(games.fourball?.enabled){
     const c=games.fourball,teams=c.teams||[];
     if(teams.length<2 || new Set(teams.map(t=>t.id)).size!==teams.length)fail('Fourball necesita al menos dos parejas distintas.');
-    if(players.some(p=>!teams.some(t=>t.id===p.fourballTeam)) || teams.some(t=>players.filter(p=>p.fourballTeam===t.id).length!==2))fail('Asigná exactamente dos jugadores a cada pareja de Fourball y una pareja a cada jugador.');
+    if(players.some(p=>p.fourballTeam&&!teams.some(t=>t.id===p.fourballTeam)) || teams.some(t=>players.filter(p=>p.fourballTeam===t.id).length!==2))fail('Asigná exactamente dos jugadores a cada pareja de Fourball. Los jugadores sin pareja no participan.');
     if(teams.some(t=>!t.npt&&!Number.isFinite(parseScore(t.score))))fail('Completá el score neto de todas las parejas de Fourball.');
     const multiplier=2;
     const teamPlayers=teams.map(t=>({id:t.id,name:t.name,net:t.score,npt:!!t.npt}));
@@ -140,7 +144,7 @@ export function calculate(match) {
         split(team.entries[i].won*multiplier,members).forEach((n,id)=>prizes.set(id,n));
       }
       const retained=[...charges.values()].reduce((s,n)=>s+n,0)-[...prizes.values()].reduce((s,n)=>s+n,0);
-      record(i===0?'Fourball · parejas':'Fourball · penalidad NPT para la mesa',charges,prizes,retained);
+      record(i===0?'Fourball · parejas':'Fourball · penalidad NPT para la mesa',charges,prizes,retained,[...charges.keys()]);
     }
     fourball=medalGroups(teamPlayers).map(group=>group.map(t=>({...t,members:players.filter(p=>p.fourballTeam===t.id).map(p=>p.id)})));
   }

@@ -16,3 +16,5 @@
 @media(max-width:700px){.account .badge{display:none}.main-nav .text-button{white-space:nowrap}}
 .mobile-only{display:none!important}
 @media(max-width:700px){.ranking-table table{min-width:0;table-layout:fixed;width:100%}.ranking-table th,.ranking-table td{padding:12px 4px}.ranking-table th:first-child,.ranking-table td:first-child{width:35px}.ranking-table th:nth-child(3),.ranking-table td:nth-child(3){display:none}.ranking-table th:last-child,.ranking-table td:last-child{width:105px}.ranking-table td:nth-child(2){overflow-wrap:anywhere}.ranking-table small{font-size:10px}.ranking-table .mobile-only{display:block!important}.ranking-heading-actions>button{white-space:nowrap;font-size:12px;padding:11px 12px}}
+
+.shared-roles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));grid-column:1/-1}.shared-roles .field{min-width:0}.shared-roles .field>span{overflow-wrap:anywhere}

@@ -7,6 +7,10 @@ service cloud.firestore {
     function email() {
       return request.auth.token.get('email_verified', false) ? request.auth.token.get('email', '').lower() : '';
     }
+    function mayEditMatch(m) {
+      return signedIn() && (m.ownerId == request.auth.uid ||
+        (m.get('visibility', 'public') == 'shared' && email() != '' && email() in m.get('editorEmails', [])));
+    }
     function mayContribute(rankId) {
       let r = get(/databases/$(database)/documents/rankings/$(rankId)).data;
       return signedIn() && (r.ownerId == request.auth.uid || r.visibility == 'public' || (email() != '' && email() in r.contributorEmails));
@@ -46,7 +50,7 @@ service cloud.firestore {
     function validMatch() {
       let m = request.resource.data;
       return m.keys().hasAll(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails'])
-        && m.keys().hasOnly(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails', 'currency', 'rankingIds'])
+        && m.keys().hasOnly(['id', 'name', 'date', 'holes', 'players', 'teams', 'games', 'ownerId', 'ownerName', 'createdAt', 'updatedAt', 'visibility', 'sharedEmails', 'currency', 'rankingIds', 'editorEmails'])
         && m.id is string && m.id.size() > 0
         && m.name is string && m.name.size() > 0 && m.name.size() <= 100
         && m.date is string && m.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
@@ -55,9 +59,11 @@ service cloud.firestore {
         && m.players is list && m.players.size() >= 2 && m.players.size() <= 100
         && m.teams is list && m.teams.size() <= 50
         && m.games is map
-        && m.ownerId == request.auth.uid
+        && m.ownerId is string
         && m.visibility in ['private', 'shared', 'public']
         && m.sharedEmails is list && m.sharedEmails.size() <= 50
+        && m.get('editorEmails', []) is list && m.get('editorEmails', []).size() <= 50
+        && m.sharedEmails.hasAll(m.get('editorEmails', []))
         && (m.visibility == 'shared' ? m.sharedEmails.size() > 0 : m.sharedEmails.size() == 0)
         && m.ownerName is string
         && m.updatedAt == request.time && linkedEntries(m);
@@ -69,10 +75,13 @@ service cloud.firestore {
         || (request.auth.token.get('email_verified', false)
           && request.auth.token.get('email', '').lower() in resource.data.get('sharedEmails', []))
       );
-      allow create: if signedIn() && validMatch()
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid && validMatch()
         && request.resource.data.id == matchId
         && request.resource.data.createdAt == request.time;
-      allow update: if signedIn() && resource.data.ownerId == request.auth.uid
+      allow update: if mayEditMatch(resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.ownerName == resource.data.ownerName
+        && (resource.data.ownerId == request.auth.uid || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','date','players','teams','games','updatedAt']))
         && validMatch()
         && request.resource.data.id == matchId
         && request.resource.data.createdAt == resource.data.createdAt && removedEntries(request.resource.data);
@@ -96,17 +105,18 @@ service cloud.firestore {
       allow update: if signedIn() && resource.data.ownerId == request.auth.uid && validRanking()
         && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.currency == resource.data.currency;
       match /entries/{matchId} {
-        function validEntry() {
+        function validEntry(updating) {
           let e = request.resource.data;
           let m = getAfter(/databases/$(database)/documents/matches/$(matchId)).data;
           let r = get(/databases/$(database)/documents/rankings/$(rankId)).data;
           return e.keys().hasOnly(['id','ownerId','ownerName','name','date','currency','players','teams','games','updatedAt'])
-            && m.ownerId == request.auth.uid && rankId in m.get('rankingIds', []) && entryMatches(e, m)
-            && e.date >= r.startDate && e.date <= r.endDate && e.currency == r.currency && mayContribute(rankId);
+            && mayEditMatch(m) && rankId in m.get('rankingIds', []) && entryMatches(e, m)
+            && e.date >= r.startDate && e.date <= r.endDate && e.currency == r.currency
+            && ((m.ownerId == request.auth.uid && mayContribute(rankId)) || (updating && mayEditMatch(get(/databases/$(database)/documents/matches/$(matchId)).data) && rankId in get(/databases/$(database)/documents/matches/$(matchId)).data.get('rankingIds', [])));
         }
         allow read: if signedIn() && (mayReadRanking(rankId) || resource.data.ownerId == request.auth.uid);
-        allow create: if signedIn() && validEntry();
-        allow update: if signedIn() && resource.data.ownerId == request.auth.uid && validEntry();
+        allow create: if signedIn() && validEntry(false);
+        allow update: if signedIn() && request.resource.data.ownerId == resource.data.ownerId && validEntry(true);
         allow delete: if signedIn() && resource.data.ownerId == request.auth.uid
           && (!existsAfter(/databases/$(database)/documents/matches/$(matchId)) || !(rankId in getAfter(/databases/$(database)/documents/matches/$(matchId)).data.get('rankingIds', [])));
       }
